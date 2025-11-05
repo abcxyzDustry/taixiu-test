@@ -14,6 +14,25 @@ let expressWs  = require('express-ws')(app);
 let bodyParser = require('body-parser');
 var morgan = require('morgan');
 
+// Debug: Kiểm tra file tồn tại
+const fs = require('fs');
+const path = require('path');
+
+const checkFileExists = (filePath, name) => {
+    const fullPath = path.join(__dirname, filePath);
+    const exists = fs.existsSync(fullPath);
+    console.log(`📁 ${name}: ${exists ? '✅ EXISTS' : '❌ MISSING'} - ${fullPath}`);
+    return exists;
+};
+
+// Kiểm tra tất cả file quan trọng
+console.log('\n🔍 CHECKING REQUIRED FILES:');
+checkFileExists('./routerHttp.js', 'routerHttp');
+checkFileExists('./routerSocket.js', 'routerSocket');
+checkFileExists('./Cron/taixiu.js', 'taixiu cron');
+checkFileExists('./Cron/baucua.js', 'baucua cron');
+checkFileExists('./Helpers/socketUser.js', 'socketUser');
+
 // Telegram Bot
 let TelegramBot = null;
 if (process.env.TELEGRAM_BOT_TOKEN) {
@@ -68,6 +87,11 @@ global['redT'] = redT;
 global.SKnapthe = 2;
 global['userOnline'] = 0;
 
+// FIX: Khởi tạo các biến cần thiết cho game
+redT.users = {};
+redT.admins = {};
+redT.listBot = [];
+
 // Simple routerHttp
 const createSimpleRouterHttp = function(app, redT) {
     console.log('✅ Using simple routerHttp');
@@ -107,8 +131,8 @@ const createSimpleRouterHttp = function(app, redT) {
         res.json({
             server: 'running',
             games: {
-                taixiu: 'maintenance', // Tạm thời bảo trì
-                baucua: 'maintenance', // Tạm thời bảo trì
+                taixiu: 'available',
+                baucua: 'available', // Đã enable Bầu Cua
                 minipoker: 'available',
                 banca: 'available'
             },
@@ -122,17 +146,63 @@ const createSimpleRouterSocket = function(app, redT) {
     
     app.ws('/client', function(ws, req) {
         console.log('🔌 WebSocket client connected');
+        
+        // Thêm client vào users
+        const clientId = Date.now().toString();
+        if (!redT.users[clientId]) {
+            redT.users[clientId] = [];
+        }
+        redT.users[clientId].push(ws);
+        
         ws.on('message', function(msg) {
             console.log('📨 WebSocket message:', msg);
-            // Echo message for testing
-            ws.send(JSON.stringify({ type: 'echo', message: msg }));
+            try {
+                const data = JSON.parse(msg);
+                // Xử lý message từ client
+                if (data.type === 'ping') {
+                    ws.send(JSON.stringify({ type: 'pong', time: Date.now() }));
+                }
+            } catch (e) {
+                console.log('❌ WebSocket message error:', e.message);
+            }
         });
-        ws.send(JSON.stringify({ type: 'connected', message: 'Welcome to game server' }));
+        
+        ws.on('close', function() {
+            console.log('🔌 WebSocket client disconnected');
+            // Xóa client khỏi users
+            if (redT.users[clientId]) {
+                const index = redT.users[clientId].indexOf(ws);
+                if (index > -1) {
+                    redT.users[clientId].splice(index, 1);
+                }
+                if (redT.users[clientId].length === 0) {
+                    delete redT.users[clientId];
+                }
+            }
+        });
+        
+        ws.send(JSON.stringify({ 
+            type: 'connected', 
+            message: 'Welcome to game server',
+            clientId: clientId
+        }));
     });
 
     app.ws('/admin', function(ws, req) {
         console.log('🔌 WebSocket admin connected');
-        ws.send(JSON.stringify({ type: 'admin_connected', message: 'Admin connected' }));
+        
+        // Thêm admin vào admins
+        const adminId = 'admin_' + Date.now().toString();
+        if (!redT.admins[adminId]) {
+            redT.admins[adminId] = [];
+        }
+        redT.admins[adminId].push(ws);
+        
+        ws.send(JSON.stringify({ 
+            type: 'admin_connected', 
+            message: 'Admin connected',
+            adminId: adminId
+        }));
     });
 };
 
@@ -140,8 +210,43 @@ const createSimpleRouterSocket = function(app, redT) {
 createSimpleRouterHttp(app, redT);
 createSimpleRouterSocket(app, redT);
 
-// Tạm thời bỏ qua các game cron để tránh lỗi
-console.log('ℹ️ Game crons temporarily disabled for stability');
+// Load game crons - ĐÃ ENABLE BẦU CUA
+console.log('\n🚀 LOADING GAME CRONS:');
+
+try {
+    if (checkFileExists('./Cron/taixiu.js', 'taixiu cron')) {
+        require('./Cron/taixiu')(redT);
+        console.log('✅ taixiu cron loaded successfully');
+    } else {
+        console.log('ℹ️ taixiu cron not found, skipping');
+    }
+} catch (e) {
+    console.log('❌ taixiu cron error:', e.message);
+}
+
+// QUAN TRỌNG: ĐÃ ENABLE BẦU CUA TRỞ LẠI
+try {
+    if (checkFileExists('./Cron/baucua.js', 'baucua cron')) {
+        require('./Cron/baucua')(redT);
+        console.log('✅ baucua cron loaded successfully');
+    } else {
+        console.log('ℹ️ baucua cron not found, skipping');
+    }
+} catch (e) {
+    console.log('❌ baucua cron error:', e.message);
+}
+
+// Load socketUser
+try {
+    if (checkFileExists('./Helpers/socketUser.js', 'socketUser')) {
+        require('./Helpers/socketUser')(redT);
+        console.log('✅ socketUser loaded successfully');
+    } else {
+        console.log('ℹ️ socketUser not found, skipping');
+    }
+} catch (e) {
+    console.log('❌ socketUser error:', e.message);
+}
 
 // Routes
 app.get('/', (req, res) => {
@@ -151,8 +256,24 @@ app.get('/', (req, res) => {
         version: '1.0.0',
         port: port,
         database: 'Connected',
-        timestamp: new Date().toISOString(),
-        note: 'Game features coming soon...'
+        games: ['Tài Xỉu', 'Bầu Cua', 'Mini Poker', 'Bắn Cá'],
+        timestamp: new Date().toISOString()
+    });
+});
+
+app.get('/game/baucua', (req, res) => {
+    res.json({
+        game: 'Bầu Cua',
+        status: 'running',
+        description: 'Bầu Cua game is now active'
+    });
+});
+
+app.get('/game/taixiu', (req, res) => {
+    res.json({
+        game: 'Tài Xỉu',
+        status: 'running',
+        description: 'Tài Xỉu game is now active'
     });
 });
 
@@ -162,7 +283,8 @@ const server = app.listen(port, '0.0.0.0', function() {
     console.log("✅ Server is running on port", port);
     console.log("🌐 Access URL: https://one11bet-com.onrender.com");
     console.log("📊 Database: Connected");
-    console.log("🎮 Basic features: WebSocket, API routes");
+    console.log("🎮 ACTIVE GAMES: Tài Xỉu, Bầu Cua");
+    console.log("🔌 WebSocket: /client, /admin");
 });
 
 // Xử lý lỗi
@@ -173,3 +295,5 @@ process.on('unhandledRejection', (err) => {
 process.on('uncaughtException', (err) => {
     console.error('❌ Uncaught Exception:', err);
 });
+
+console.log('\n🔧 SERVER INITIALIZATION COMPLETE');
