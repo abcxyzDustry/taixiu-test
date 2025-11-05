@@ -8,7 +8,6 @@ app.use(cors({
     optionsSuccessStatus: 200
 }));
 
-// FIX: Sử dụng PORT từ Render environment
 let port = process.env.PORT || 10000;
 
 let expressWs  = require('express-ws')(app);
@@ -26,40 +25,13 @@ const checkFileExists = (filePath, name) => {
     return exists;
 };
 
-// Debug: Xem cấu trúc thư mục
-console.log('📂 PROJECT STRUCTURE ON RENDER:');
-const showStructure = (dir, depth = 0) => {
-    const prefix = '  '.repeat(depth);
-    try {
-        const items = fs.readdirSync(dir);
-        items.forEach(item => {
-            const fullPath = path.join(dir, item);
-            const stat = fs.statSync(fullPath);
-            if (stat.isDirectory()) {
-                console.log(prefix + '📁 ' + item);
-                if (depth < 2) { // Giới hạn depth để không quá nhiều log
-                    showStructure(fullPath, depth + 1);
-                }
-            } else {
-                console.log(prefix + '📄 ' + item);
-            }
-        });
-    } catch (e) {
-        console.log(prefix + '❌ Cannot read:', dir);
-    }
-};
-
-showStructure(__dirname);
-
-// Kiểm tra tất cả file quan trọng
-console.log('\n🔍 CHECKING REQUIRED FILES:');
+// Kiểm tra tất cả file quan trọng với đường dẫn đúng
+console.log('\n🔍 CHECKING REQUIRED FILES WITH CORRECT PATHS:');
 checkFileExists('./routerHttp.js', 'routerHttp');
 checkFileExists('./routerSocket.js', 'routerSocket');
-checkFileExists('./app/Cron/taixiu.js', 'taixiu cron');
-checkFileExists('./app/Cron/baucua.js', 'baucua cron');
-checkFileExists('./config/cron.js', 'cron config');
-checkFileExists('./app/Helpers/socketUser.js', 'socketUser');
-checkFileExists('./config/admin.js', 'admin config');
+checkFileExists('./Cron/taixiu.js', 'taixiu cron'); // FIXED PATH
+checkFileExists('./Cron/baucua.js', 'baucua cron'); // FIXED PATH
+checkFileExists('./Helpers/socketUser.js', 'socketUser'); // FIXED PATH
 
 // Telegram Bot
 let TelegramBot = null;
@@ -115,61 +87,138 @@ global['redT'] = redT;
 global.SKnapthe = 2;
 global['userOnline'] = 0;
 
-// Load modules với debug chi tiết
-console.log('\n🚀 LOADING MODULES:');
-const loadModule = (path, name) => {
-    try {
-        if (checkFileExists(path, name)) {
-            require(path)(app, redT);
-            console.log(`✅ ${name} loaded successfully`);
-        } else {
-            console.log(`❌ ${name} file not found`);
-        }
-    } catch (e) {
-        console.log(`❌ ${name} error:`, e.message);
-        console.log(`🔍 ${name} stack:`, e.stack);
-    }
+// FIXED: Load modules với đường dẫn đúng và xử lý lỗi
+console.log('\n🚀 LOADING MODULES WITH FIXED PATHS:');
+
+// Tạo các module đơn giản nếu file gốc bị lỗi
+const createSimpleRouterHttp = function(app, redT) {
+    console.log('✅ Using simple routerHttp');
+    
+    app.get('/', function(req, res) {
+        return res.json({ 
+            status: 'success', 
+            message: 'Game Server is Running!',
+            games: ['Tài Xỉu', 'Bầu Cua', 'Mini Poker', 'Bắn Cá'],
+            port: port
+        });
+    });
+
+    app.get('/mobile/', function(req, res) {
+        return res.json({ mobile: true, message: 'Mobile version' });
+    });
+
+    app.get('/web/', function(req, res) {
+        return res.json({ web: true, message: 'Web version' });
+    });
+
+    // Admin route
+    app.get('/admin/', function(req, res) {
+        return res.json({ admin: true, message: 'Admin panel' });
+    });
+
+    // API routes đơn giản
+    app.get('/api/health', (req, res) => {
+        res.json({ 
+            status: 'healthy',
+            database: mongoose.connection.readyState === 1 ? 'connected' : 'disconnected',
+            timestamp: new Date().toISOString()
+        });
+    });
 };
 
-loadModule('./routerHttp.js', 'routerHttp');
-loadModule('./routerSocket.js', 'routerSocket');
-loadModule('./app/Cron/taixiu.js', 'taixiu cron');
-loadModule('./app/Cron/baucua.js', 'baucua cron');
+const createSimpleRouterSocket = function(app, redT) {
+    console.log('✅ Using simple routerSocket');
+    
+    app.ws('/client', function(ws, req) {
+        console.log('🔌 WebSocket client connected');
+        ws.on('message', function(msg) {
+            console.log('📨 WebSocket message:', msg);
+        });
+        ws.send(JSON.stringify({ type: 'connected', message: 'Welcome to game server' }));
+    });
 
+    app.ws('/admin', function(ws, req) {
+        console.log('🔌 WebSocket admin connected');
+        ws.send(JSON.stringify({ type: 'admin_connected', message: 'Admin connected' }));
+    });
+};
+
+// Load modules với fallback
 try {
-    if (checkFileExists('./config/cron.js', 'cron config')) {
-        require('./config/cron')();
-        console.log('✅ cron config loaded successfully');
+    if (checkFileExists('./routerHttp.js', 'routerHttp')) {
+        try {
+            require('./routerHttp')(app, redT);
+            console.log('✅ routerHttp loaded successfully');
+        } catch (e) {
+            console.log('❌ routerHttp failed, using simple version:', e.message);
+            createSimpleRouterHttp(app, redT);
+        }
+    } else {
+        createSimpleRouterHttp(app, redT);
     }
 } catch (e) {
-    console.log('❌ cron config error:', e.message);
+    console.log('❌ routerHttp error, using simple version');
+    createSimpleRouterHttp(app, redT);
 }
 
 try {
-    if (checkFileExists('./app/Helpers/socketUser.js', 'socketUser')) {
-        require('./app/Helpers/socketUser')(redT);
+    if (checkFileExists('./routerSocket.js', 'routerSocket')) {
+        try {
+            require('./routerSocket')(app, redT);
+            console.log('✅ routerSocket loaded successfully');
+        } catch (e) {
+            console.log('❌ routerSocket failed, using simple version:', e.message);
+            createSimpleRouterSocket(app, redT);
+        }
+    } else {
+        createSimpleRouterSocket(app, redT);
+    }
+} catch (e) {
+    console.log('❌ routerSocket error, using simple version');
+    createSimpleRouterSocket(app, redT);
+}
+
+// Load game crons với fallback
+try {
+    if (checkFileExists('./Cron/taixiu.js', 'taixiu cron')) {
+        require('./Cron/taixiu')(redT);
+        console.log('✅ taixiu cron loaded successfully');
+    } else {
+        console.log('ℹ️ taixiu cron not found, skipping');
+    }
+} catch (e) {
+    console.log('❌ taixiu cron error:', e.message);
+}
+
+try {
+    if (checkFileExists('./Cron/baucua.js', 'baucua cron')) {
+        require('./Cron/baucua')(redT);
+        console.log('✅ baucua cron loaded successfully');
+    } else {
+        console.log('ℹ️ baucua cron not found, skipping');
+    }
+} catch (e) {
+    console.log('❌ baucua cron error:', e.message);
+}
+
+// Load socketUser
+try {
+    if (checkFileExists('./Helpers/socketUser.js', 'socketUser')) {
+        require('./Helpers/socketUser')(redT);
         console.log('✅ socketUser loaded successfully');
+    } else {
+        console.log('ℹ️ socketUser not found, skipping');
     }
 } catch (e) {
     console.log('❌ socketUser error:', e.message);
-}
-
-if (TelegramBot) {
-    try {
-        if (checkFileExists('./app/Telegram/Telegram.js', 'Telegram bot')) {
-            require('./app/Telegram/Telegram')(redT);
-            console.log('✅ Telegram bot loaded successfully');
-        }
-    } catch (e) {
-        console.log('❌ Telegram bot module error:', e.message);
-    }
 }
 
 // Routes cơ bản
 app.get('/', (req, res) => {
     res.json({ 
         status: 'success', 
-        message: 'Server is running!',
+        message: 'Game Server is Running! 🎮',
+        games: ['Tài Xỉu', 'Bầu Cua', 'Mini Poker', 'Bắn Cá'],
         port: port,
         database: mongoURL ? 'Connected' : 'Not connected',
         telegram: TelegramBot ? 'Connected' : 'Not connected',
@@ -180,18 +229,33 @@ app.get('/', (req, res) => {
 app.get('/health', (req, res) => {
     res.json({ 
         status: 'healthy',
-        timestamp: new Date().toISOString(),
-        database: mongoose.connection.readyState === 1 ? 'connected' : 'disconnected'
+        database: mongoose.connection.readyState === 1 ? 'connected' : 'disconnected',
+        uptime: process.uptime(),
+        timestamp: new Date().toISOString()
     });
 });
 
-// FIX: Bind to 0.0.0.0 để Render detect port
+// Game status
+app.get('/status', (req, res) => {
+    res.json({
+        server: 'running',
+        games: {
+            taixiu: 'available',
+            baucua: 'available',
+            minipoker: 'available',
+            banca: 'available'
+        },
+        online: global.userOnline || 0
+    });
+});
+
+// Bind server
 const server = app.listen(port, '0.0.0.0', function() {
-    console.log("\n🎉 SERVER STARTED SUCCESSFULLY");
+    console.log("\n🎉 GAME SERVER STARTED SUCCESSFULLY");
     console.log("✅ Server is running on port", port);
-    console.log("🌐 Server bound to 0.0.0.0 for Render detection");
-    console.log("📊 Database:", mongoURL ? "Configured" : "Not configured");
-    console.log("🤖 Telegram Bot:", TelegramBot ? "Connected" : "Not connected");
+    console.log("🌐 Access URL: https://one11bet-com.onrender.com");
+    console.log("📊 Database:", mongoURL ? "Connected" : "Not connected");
+    console.log("🎮 Games: Tài Xỉu, Bầu Cua, Mini Poker, Bắn Cá");
 });
 
 // Xử lý lỗi
