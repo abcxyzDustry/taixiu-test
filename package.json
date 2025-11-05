@@ -39,6 +39,7 @@
 		"axios": "^1.6.2",
 		"saslprep": "^1.0.3",
 		"nanoid": "^3.3.7",
+		"shortid": "^2.2.16",
 		"svg-captcha": "^1.4.0",
 		"svg2img": "^0.9.3",
 		"telebot": "1.4.1",
@@ -60,8 +61,6 @@
 		"name": "hải kiều",
 		"email": "djthewolf9@gmail.com",
 		"url": "https://github.com/abcxyzDustry?tab=repositories"
-	"dependencies": {
-    "shortid": "^2.2.16"
 	},
 	"license": "ISC"
 }
