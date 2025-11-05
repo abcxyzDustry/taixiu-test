@@ -1,8 +1,7 @@
-
 require('dotenv').config();
 var cors = require('cors');
 let Telegram      = require('node-telegram-bot-api');
-let TelegramToken = '1994240179:AAGmDQfq2EUrAtdVkdsABmp7tvgBNkqbrWs';
+let TelegramToken = process.env.TELEGRAM_BOT_TOKEN || '1994240179:AAGmDQfq2EUrAtdVkdsABmp7tvgBNkqbrWs';
 let TelegramBot   = new Telegram(TelegramToken, {polling: true});
 let fs 			  = require('fs');
 //let https     	  = require('https')
@@ -24,9 +23,16 @@ var morgan = require('morgan');
 let configDB = require('./config/database');
 let mongoose = require('mongoose');
 require('mongoose-long')(mongoose); // INT 64bit
-mongoose.set('useFindAndModify', false);
-mongoose.set('useCreateIndex',   true);
-mongoose.connect(configDB.url, configDB.options); // kết nối tới database
+
+// Cập nhật mongoose settings cho phiên bản mới
+mongoose.set('strictQuery', false);
+
+mongoose.connect(configDB.url, configDB.options).then(() => {
+    console.log('Connected to MongoDB successfully');
+}).catch(err => {
+    console.error('MongoDB connection error:', err);
+});
+
 // cấu hình tài khoản admin mặc định và các dữ liệu mặc định
 require('./config/admin');
 // đọc dữ liệu from
@@ -52,6 +58,16 @@ require('./app/Cron/taixiu')(redT);   // Chạy game Tài Xỉu
 require('./app/Cron/baucua')(redT);   // Chạy game Bầu Cua
 require('./config/cron')();
 require('./app/Telegram/Telegram')(redT); // Telegram Bot
+
+// Xử lý lỗi unhandled promise rejections
+process.on('unhandledRejection', (err) => {
+    console.error('Unhandled Promise Rejection:', err);
+});
+
+process.on('uncaughtException', (err) => {
+    console.error('Uncaught Exception:', err);
+});
+
 app.listen(port, function() {
     console.log("Server listen on port ", port);
 });
