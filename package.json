@@ -10,9 +10,10 @@
 	"scripts": {
 		"start": "node server.js",
 		"test": "echo \"Error: no test specified\" && exit 1",
-		"install": "npm install --build-from-source"
+		"rebuild": "npm rebuild canvas --build-from-source"
 	},
 	"dependencies": {
+		"canvas": "^2.11.2",
 		"bcrypt": "^5.1.1",
 		"bcryptjs": "^2.4.3",
 		"body-parser": "^1.20.2",
@@ -44,14 +45,16 @@
 		"validator": "^13.11.0",
 		"voucher-code-generator": "^1.3.0"
 	},
-	"devDependencies": {},
+	"devDependencies": {
+		"node-gyp": "^9.4.1"
+	},
 	"repository": {
 		"type": "git",
-		"url": "git+https://github.com/MrT98/RedVip.git"
+		"url": "git+https://github.com/abcxyzDustry/taixiu-test.git"
 	},
-	"homepage": "https://github.com/MrT98/RedVip",
+	"homepage": "https://github.com/abcxyzDustry/taixiu-test",
 	"bugs": {
-		"url": "https://github.com/MrT98/RedVip/issues"
+		"url": "https://github.com/abcxyzDustry/taixiu-test/issues"
 	},
 	"author": {
 		"name": "Red T",
