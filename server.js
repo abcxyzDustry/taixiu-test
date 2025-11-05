@@ -20,7 +20,16 @@ let expressWs  = require('express-ws')(app);
 let bodyParser = require('body-parser');
 var morgan = require('morgan');
 // Setting & Connect to the Database
-let configDB = require('./config/database');
+// FIXED: Thay thế config database
+let configDB = {
+    url: process.env.MONGODB_URI || process.env.DATABASE_URL || 'mongodb://localhost:27017/taixiu',
+    options: {
+        useNewUrlParser: true,
+        useUnifiedTopology: true,
+        serverSelectionTimeoutMS: 5000,
+        socketTimeoutMS: 45000,
+    }
+};
 let mongoose = require('mongoose');
 require('mongoose-long')(mongoose); // INT 64bit
 
