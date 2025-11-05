@@ -1,4 +1,3 @@
-
 let path         = require('path');
 let fs           = require('fs');
 let Helpers      = require('../Helpers/Helpers');
@@ -34,6 +33,11 @@ let init = function init(obj){
 		redTom:0,
 	};
 
+	// FIX: Khởi tạo io.users và io.admins nếu chưa có
+	if (!io.users) io.users = {};
+	if (!io.admins) io.admins = {};
+	if (!io.listBot) io.listBot = [];
+
 	BauCua_phien.findOne({}, 'id', {sort:{'_id':-1}}, function(err, last) {
 		if (!!last){
 			io.BauCua_phien = last.id+1;
@@ -62,7 +66,7 @@ let thongtin_thanhtoan = function thongtin_thanhtoan(dice = null){
 		let phien = io.BauCua_phien-1;
 		BauCua_temp.updateOne({}, {$inc:updateLog}).exec();
 		BauCua_cuoc.find({phien:phien}, {}, function(err, list) {
-			if (list.length) {
+			if (list && list.length) {
 				Promise.all(list.map(function(cuoc){
 					let TongThua  = 0; // Số tiền thua
 					let TongThang = 0; // Tổng tiền thắng (đã tính gốc)
@@ -157,7 +161,8 @@ let thongtin_thanhtoan = function thongtin_thanhtoan(dice = null){
 					BauCua_user.updateOne({uid:cuoc.uid}, {$inc:updateGame}).exec();
 					!cuoc.bot && (UserInfo.updateOne({id:cuoc.uid}, {$inc:update}).exec());
 
-					if(void 0 !== io.users[cuoc.uid]){
+					// FIX: Thêm check cho io.users[cuoc.uid]
+					if(io.users && io.users[cuoc.uid] && Array.isArray(io.users[cuoc.uid])){
 						let status = {};
 						if (TongThang > 0) {
 							status = {mini:{baucua:{status:{win:true, bet:TongThang}}}};
@@ -165,7 +170,9 @@ let thongtin_thanhtoan = function thongtin_thanhtoan(dice = null){
 							status = {mini:{baucua:{status:{win:false, bet:Math.abs(totall)}}}};
 						}
 						io.users[cuoc.uid].forEach(function(client){
-							client.red(status);
+							if (client && client.red) {
+								client.red(status);
+							}
 						});
 						status = null;
 					}
@@ -186,7 +193,7 @@ let thongtin_thanhtoan = function thongtin_thanhtoan(dice = null){
 					phien = null;
 					dice = null;
 					arrayOfResults = arrayOfResults.filter(function(st){
-						return st.bet > 10000;
+						return st && st.bet > 10000;
 					});
 					if (arrayOfResults.length) {
 						arrayOfResults.sort(function(a, b){
@@ -200,7 +207,9 @@ let thongtin_thanhtoan = function thongtin_thanhtoan(dice = null){
 							return {users:obj.users, bet:obj.bet, game:'Bầu Cua'};
 						}))
 						.then(results => {
-							io.sendInHome({news:{a:results}});
+							if (io && io.sendInHome) {
+								io.sendInHome({news:{a:results}});
+							}
 							results = null;
 						});
 					}
@@ -214,22 +223,31 @@ let thongtin_thanhtoan = function thongtin_thanhtoan(dice = null){
 			}
 		});
 	}else{
-		Object.values(io.users).forEach(function(users){
-			users.forEach(function(client){
-				if (client.gameEvent !== void 0 && client.gameEvent.viewBauCua !== void 0 && client.gameEvent.viewBauCua){
-					client.red({mini:{baucua:{data:io.baucua.info}}});
+		// FIX: Thêm check cho io.users và io.admins
+		if (io.users && typeof io.users === 'object') {
+			Object.values(io.users).forEach(function(users){
+				if (Array.isArray(users)) {
+					users.forEach(function(client){
+						if (client && client.gameEvent !== void 0 && client.gameEvent.viewBauCua !== void 0 && client.gameEvent.viewBauCua){
+							client.red({mini:{baucua:{data:io.baucua.info}}});
+						}
+					});
 				}
 			});
-		});
+		}
 
 		let admin_data = {baucua:{info:io.baucua.infoAdmin, ingame:io.baucua.ingame}};
-		Object.values(io.admins).forEach(function(admin){
-			admin.forEach(function(client){
-				if (client.gameEvent !== void 0 && client.gameEvent.viewBauCua !== void 0 && client.gameEvent.viewBauCua){
-					client.red(admin_data);
+		if (io.admins && typeof io.admins === 'object') {
+			Object.values(io.admins).forEach(function(admin){
+				if (Array.isArray(admin)) {
+					admin.forEach(function(client){
+						if (client && client.gameEvent !== void 0 && client.gameEvent.viewBauCua !== void 0 && client.gameEvent.viewBauCua){
+							client.red(admin_data);
+						}
+					});
 				}
 			});
-		});
+		}
 	}
 }
 
@@ -261,13 +279,24 @@ let playGame = function(){
 						if (!!create) {
 							io.BauCua_phien = create.id+1;
 							thongtin_thanhtoan([dice1, dice2, dice3]);
-							io.sendAllUser({mini:{baucua:{finish:{dices:[create.dice1, create.dice2, create.dice3], phien:create.id}}}});
+							
+							// FIX: Thêm check cho sendAllUser
+							if (io && io.sendAllUser) {
+								io.sendAllUser({mini:{baucua:{finish:{dices:[create.dice1, create.dice2, create.dice3], phien:create.id}}}});
+							}
 
-							Object.values(io.admins).forEach(function(admin){
-								admin.forEach(function(client){
-									client.red({baucua:{finish:true, dices:[create.dice1, create.dice2, create.dice3]}});
+							// FIX: Thêm check cho io.admins
+							if (io.admins && typeof io.admins === 'object') {
+								Object.values(io.admins).forEach(function(admin){
+									if (Array.isArray(admin)) {
+										admin.forEach(function(client){
+											if (client && client.red) {
+												client.red({baucua:{finish:true, dices:[create.dice1, create.dice2, create.dice3]}});
+											}
+										});
+									}
 								});
-							});
+							}
 						}
 					});
 				}
@@ -305,7 +334,12 @@ let playGame = function(){
 					for (let i = 0; i < userCuoc; i++) {
 						let dataT = botList[i];
 						if (!!dataT) {
-							bot(dataT, io);
+							// FIX: Thêm try-catch cho bot
+							try {
+								bot(dataT, io);
+							} catch (e) {
+								console.log('❌ Bot error:', e.message);
+							}
 							botList.splice(i, 1); // Xoá bot đã đặt tránh trùng lặp
 						}
 						dataT = null;
