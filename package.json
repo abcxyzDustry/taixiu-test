@@ -57,9 +57,11 @@
 		"url": "https://github.com/abcxyzDustry/taixiu-test/issues"
 	},
 	"author": {
-		"name": "Red T",
-		"email": "toan.vp98.wapmaster@gmail.com",
-		"url": "https://github.com/MrT98"
+		"name": "hải kiều",
+		"email": "djthewolf9@gmail.com",
+		"url": "https://github.com/abcxyzDustry?tab=repositories"
+	"dependencies": {
+    "shortid": "^2.2.16"
 	},
 	"license": "ISC"
 }
