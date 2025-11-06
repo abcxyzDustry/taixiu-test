@@ -2,11 +2,12 @@ const express = require('express');
 const http = require('http');
 const socketIo = require('socket.io');
 const cors = require('cors');
+const crypto = require('crypto');
 
 const app = express();
 const server = http.createServer(app);
 
-// CORS configuration - Allow your game domain
+// CORS configuration
 app.use(cors({
   origin: [
     "https://one11bet-com.onrender.com",
@@ -15,6 +16,9 @@ app.use(cors({
   ],
   credentials: true
 }));
+
+// Middleware để parse JSON
+app.use(express.json());
 
 // Socket.IO configuration
 const io = socketIo(server, {
@@ -32,6 +36,226 @@ const io = socketIo(server, {
 
 const PORT = process.env.PORT || 3001;
 
+// ==================== AUTHENTICATION DATABASE ====================
+// Mock database (trong thực tế dùng MongoDB/MySQL)
+const users = new Map();
+const sessions = new Map();
+
+// Helper functions
+function generateToken(userId) {
+  return crypto.randomBytes(32).toString('hex');
+}
+
+function hashPassword(password) {
+  return crypto.createHash('sha256').update(password).digest('hex');
+}
+
+// ==================== AUTHENTICATION API ENDPOINTS ====================
+// User Registration
+app.post('/api/auth/register', (req, res) => {
+  try {
+    const { username, password, captcha, email, phone } = req.body;
+    
+    console.log('📝 Register attempt:', { 
+      username, 
+      captcha,
+      hasPassword: !!password 
+    });
+
+    // Validation
+    if (!username || !password) {
+      return res.json({
+        success: false,
+        message: 'Tên đăng nhập và mật khẩu không được để trống'
+      });
+    }
+
+    if (username.length < 3) {
+      return res.json({
+        success: false,
+        message: 'Tên đăng nhập phải có ít nhất 3 ký tự'
+      });
+    }
+
+    if (password.length < 6) {
+      return res.json({
+        success: false,
+        message: 'Mật khẩu phải có ít nhất 6 ký tự'
+      });
+    }
+
+    // Check if user exists
+    if (users.has(username)) {
+      return res.json({
+        success: false,
+        message: 'Tên đăng nhập đã tồn tại'
+      });
+    }
+
+    // Create new user
+    const user = {
+      id: generateToken(username),
+      username,
+      password: hashPassword(password),
+      email: email || '',
+      phone: phone || '',
+      balance: 1000000, // Starting balance
+      level: 1,
+      createdAt: new Date(),
+      lastLogin: new Date(),
+      isOnline: false
+    };
+
+    users.set(username, user);
+
+    console.log('✅ User registered successfully:', username);
+
+    res.json({
+      success: true,
+      message: 'Đăng ký thành công!',
+      user: {
+        id: user.id,
+        username: user.username,
+        balance: user.balance,
+        level: user.level,
+        token: generateToken(username)
+      }
+    });
+
+  } catch (error) {
+    console.error('❌ Registration error:', error);
+    res.json({
+      success: false,
+      message: 'Lỗi hệ thống, vui lòng thử lại'
+    });
+  }
+});
+
+// User Login
+app.post('/api/auth/login', (req, res) => {
+  try {
+    const { username, password, captcha } = req.body;
+    
+    console.log('🔐 Login attempt:', { 
+      username, 
+      captcha,
+      hasPassword: !!password 
+    });
+
+    // Validation
+    if (!username || !password) {
+      return res.json({
+        success: false,
+        message: 'Tên đăng nhập và mật khẩu không được để trống'
+      });
+    }
+
+    // Check user exists
+    const user = users.get(username);
+    if (!user) {
+      return res.json({
+        success: false,
+        message: 'Tên đăng nhập không tồn tại'
+      });
+    }
+
+    // Check password
+    if (user.password !== hashPassword(password)) {
+      return res.json({
+        success: false,
+        message: 'Mật khẩu không đúng'
+      });
+    }
+
+    // Update user status
+    user.lastLogin = new Date();
+    user.isOnline = true;
+
+    // Generate session token
+    const token = generateToken(username);
+    sessions.set(token, {
+      userId: user.id,
+      username: user.username,
+      loginTime: new Date()
+    });
+
+    console.log('✅ User logged in successfully:', username);
+
+    res.json({
+      success: true,
+      message: 'Đăng nhập thành công!',
+      user: {
+        id: user.id,
+        username: user.username,
+        balance: user.balance,
+        level: user.level,
+        token: token
+      }
+    });
+
+  } catch (error) {
+    console.error('❌ Login error:', error);
+    res.json({
+      success: false,
+      message: 'Lỗi hệ thống, vui lòng thử lại'
+    });
+  }
+});
+
+// Check Token Validation
+app.post('/api/auth/validate', (req, res) => {
+  try {
+    const { token } = req.body;
+
+    if (!token) {
+      return res.json({ valid: false });
+    }
+
+    const session = sessions.get(token);
+    if (!session) {
+      return res.json({ valid: false });
+    }
+
+    res.json({ 
+      valid: true,
+      user: {
+        username: session.username
+      }
+    });
+
+  } catch (error) {
+    res.json({ valid: false });
+  }
+});
+
+// Get User Profile
+app.get('/api/user/profile', (req, res) => {
+  const token = req.headers.authorization;
+  
+  if (!token) {
+    return res.status(401).json({ error: 'Unauthorized' });
+  }
+
+  const session = sessions.get(token);
+  if (!session) {
+    return res.status(401).json({ error: 'Invalid token' });
+  }
+
+  const user = users.get(session.username);
+  if (!user) {
+    return res.status(404).json({ error: 'User not found' });
+  }
+
+  res.json({
+    username: user.username,
+    balance: user.balance,
+    level: user.level,
+    createdAt: user.createdAt,
+    lastLogin: user.lastLogin
+  });
+});
+
+// ==================== GAME MANAGEMENT ====================
 // Store game data
 const gameState = {
   players: new Map(),
@@ -49,7 +273,8 @@ io.on('connection', (socket) => {
     connectedAt: new Date(),
     name: `Player_${socket.id.slice(0, 6)}`,
     score: 0,
-    position: { x: 0, y: 0 }
+    position: { x: 0, y: 0 },
+    isAuthenticated: false
   });
 
   // Send welcome message to the new player
@@ -60,12 +285,27 @@ io.on('connection', (socket) => {
     totalPlayers: gameState.players.size
   });
 
-  // Notify all players about new connection
-  socket.broadcast.emit('player_joined', {
-    playerId: socket.id,
-    playerName: `Player_${socket.id.slice(0, 6)}`,
-    totalPlayers: gameState.players.size,
-    timestamp: new Date().toISOString()
+  // Handle authentication via socket
+  socket.on('authenticate', (data) => {
+    const { token } = data;
+    const session = sessions.get(token);
+    
+    if (session) {
+      const player = gameState.players.get(socket.id);
+      player.isAuthenticated = true;
+      player.username = session.username;
+      
+      socket.emit('authentication_success', {
+        message: 'Xác thực thành công!',
+        user: session
+      });
+      
+      console.log('✅ Socket authenticated:', session.username);
+    } else {
+      socket.emit('authentication_failed', {
+        message: 'Token không hợp lệ'
+      });
+    }
   });
 
   // Handle player movement
@@ -99,47 +339,6 @@ io.on('connection', (socket) => {
     });
   });
 
-  // Handle game result
-  socket.on('game_result', (data) => {
-    console.log('🎲 Game result:', data);
-    
-    io.emit('result_announcement', {
-      result: data.result, // 'tai' or 'xiu'
-      dice: data.dice, // [1,2,3]
-      winners: data.winners,
-      timestamp: new Date().toISOString()
-    });
-  });
-
-  // Handle chat messages
-  socket.on('chat_message', (data) => {
-    console.log('💬 Chat message:', socket.id, data);
-    
-    io.emit('chat_message', {
-      playerId: socket.id,
-      playerName: data.playerName || `Player_${socket.id.slice(0, 6)}`,
-      message: data.message,
-      timestamp: new Date().toISOString()
-    });
-  });
-
-  // Handle score updates
-  socket.on('score_update', (data) => {
-    console.log('⭐ Score update:', socket.id, data);
-    
-    const player = gameState.players.get(socket.id);
-    if (player && data.score !== undefined) {
-      player.score = data.score;
-    }
-    
-    io.emit('leaderboard_update', {
-      leaderboard: Array.from(gameState.players.values())
-        .map(p => ({ id: p.id, name: p.name, score: p.score }))
-        .sort((a, b) => b.score - a.score)
-        .slice(0, 10)
-    });
-  });
-
   // Handle disconnect
   socket.on('disconnect', (reason) => {
     console.log('❌ Player disconnected:', socket.id, 'Reason:', reason);
@@ -153,25 +352,38 @@ io.on('connection', (socket) => {
       timestamp: new Date().toISOString()
     });
   });
-
-  // Send current game state to new player
-  socket.emit('game_state', {
-    players: Array.from(gameState.players.values()),
-    totalPlayers: gameState.players.size,
-    serverTime: new Date().toISOString()
-  });
 });
 
+// ==================== HEALTH & INFO ENDPOINTS ====================
 // Health check endpoint
 app.get('/health', (req, res) => {
   res.json({ 
     status: 'OK 🟢',
-    service: 'Tài Xỉu WebSocket Server',
+    service: 'Tài Xỉu WebSocket Server + Authentication API',
     version: '1.0.0',
     totalPlayers: gameState.players.size,
+    totalUsers: users.size,
     totalConnections: gameState.totalConnections,
     uptime: Math.floor(process.uptime()) + ' seconds',
     timestamp: new Date().toISOString()
+  });
+});
+
+// Auth API info endpoint
+app.get('/api/auth/info', (req, res) => {
+  res.json({
+    service: 'Tài Xỉu Authentication API',
+    endpoints: {
+      register: 'POST /api/auth/register',
+      login: 'POST /api/auth/login',
+      validate: 'POST /api/auth/validate',
+      profile: 'GET /api/user/profile'
+    },
+    statistics: {
+      totalUsers: users.size,
+      totalSessions: sessions.size,
+      onlinePlayers: gameState.players.size
+    }
   });
 });
 
@@ -181,6 +393,7 @@ app.get('/game-info', (req, res) => {
     id: player.id,
     name: player.name,
     score: player.score,
+    authenticated: player.isAuthenticated,
     connectedAt: player.connectedAt,
     onlineFor: Math.floor((new Date() - player.connectedAt) / 1000) + 's'
   }));
@@ -198,15 +411,10 @@ app.get('/game-info', (req, res) => {
     supportedEvents: [
       'player_move', 
       'bet_placed',
-      'game_result', 
-      'chat_message',
-      'score_update',
+      'authenticate',
       'welcome',
       'player_joined',
-      'player_left',
-      'bet_update',
-      'result_announcement',
-      'leaderboard_update'
+      'player_left'
     ]
   });
 });
@@ -214,27 +422,34 @@ app.get('/game-info', (req, res) => {
 // Root endpoint
 app.get('/', (req, res) => {
   res.json({
-    message: '🎲 Tài Xỉu WebSocket Server is running!',
+    message: '🎲 Tài Xỉu WebSocket Server + Authentication API is running!',
     game: 'Tài Xỉu (Sic Bo)',
     endpoints: {
       health: '/health',
       gameInfo: '/game-info',
+      authInfo: '/api/auth/info',
       websocket: 'Connect using Socket.IO client to port ' + PORT
     },
-    exampleConnection: 'Use: socket.io-client to connect to this server'
+    authentication: {
+      register: 'POST /api/auth/register',
+      login: 'POST /api/auth/login'
+    }
   });
 });
 
 server.listen(PORT, '0.0.0.0', () => {
-  console.log('🚀 TÀI XỈU WEBSOCKET SERVER STARTED');
+  console.log('🚀 TÀI XỈU WEBSOCKET SERVER + AUTH API STARTED');
   console.log('================================');
   console.log(`📡 Port: ${PORT}`);
   console.log(`🎮 Game: Tài Xỉu (Sic Bo)`);
+  console.log(`🔐 Authentication: Enabled`);
   console.log('================================');
-  console.log('🔗 Endpoints:');
+  console.log('🔗 API Endpoints:');
   console.log(`   Health: http://localhost:${PORT}/health`);
   console.log(`   Game Info: http://localhost:${PORT}/game-info`);
-  console.log(`   WebSocket: Connect via Socket.IO client`);
+  console.log(`   Auth Info: http://localhost:${PORT}/api/auth/info`);
+  console.log(`   Register: POST http://localhost:${PORT}/api/auth/register`);
+  console.log(`   Login: POST http://localhost:${PORT}/api/auth/login`);
   console.log('================================');
   console.log('🌐 Allow origins:');
   console.log(`   - https://one11bet-com.onrender.com`);
