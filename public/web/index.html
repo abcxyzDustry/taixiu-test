@@ -40,67 +40,109 @@
   <link rel="stylesheet" type="text/css" href="style-mobile.css"/>
   <link rel="icon" href="favicon.ico"/>
 
-  <!-- 🚀 WEBSOCKET REDIRECT TO RENDER SERVER -->
+  <!-- 🚀 SOCKET.IO CLIENT & CONNECTION FIX -->
+  <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
   <script>
-// 🎮 WebSocket Redirect for Tai Xiu Game
-// Redirects all WebSocket connections to Render server
-// Server: https://one11bet-websocket.onrender.com
+// 🎮 Socket.IO Connection Fix for Tai Xiu Game
+console.log('🔧 Loading Socket.IO connection fix...');
 
-console.log('🔧 Loading Tai Xiu WebSocket redirect...');
+const SOCKET_SERVER_URL = 'https://one11bet-websocket.onrender.com';
 
+// Global Socket.IO instance for the game
+window.gameSocket = io(SOCKET_SERVER_URL, {
+  transports: ['websocket', 'polling'],
+  reconnection: true,
+  reconnectionAttempts: 5,
+  reconnectionDelay: 1000
+});
+
+// Socket event handlers
+window.gameSocket.on('connect', () => {
+  console.log('✅ Connected to Socket.IO server:', SOCKET_SERVER_URL);
+  console.log('🎮 Socket ID:', window.gameSocket.id);
+});
+
+window.gameSocket.on('welcome', (data) => {
+  console.log('🎯 Server welcome:', data);
+});
+
+window.gameSocket.on('disconnect', (reason) => {
+  console.log('❌ Disconnected from server:', reason);
+});
+
+window.gameSocket.on('connect_error', (error) => {
+  console.log('❌ Connection error:', error);
+});
+
+// Override the game's WebSocket connection to use our Socket.IO
 const originalWebSocket = window.WebSocket;
-const RENDER_WEBSOCKET_URL = 'wss://one11bet-websocket.onrender.com';
-
-// Override WebSocket constructor
 window.WebSocket = function(url, protocols) {
-    console.log('🎯 WebSocket connection attempt to:', url);
+  console.log('🎯 Game attempted WebSocket to:', url);
+  
+  if (url && url.includes('127.0.0.1')) {
+    console.log('🔄 Blocking localhost WebSocket, using Socket.IO instead');
     
-    // Redirect ALL WebSocket connections to our Render server
-    if (url) {
-        console.log('🔄 Redirecting WebSocket to:', RENDER_WEBSOCKET_URL);
-        console.log('📡 Original URL was:', url);
-        return new originalWebSocket(RENDER_WEBSOCKET_URL, protocols);
-    }
-    
-    // Fallback for no URL
-    return new originalWebSocket(url, protocols);
+    // Return a mock WebSocket that uses our Socket.IO
+    return {
+      readyState: 1, // OPEN - fake successful connection
+      send: function(data) {
+        console.log('📤 Intercepted WebSocket send:', data);
+        try {
+          const parsed = JSON.parse(data);
+          // Route to appropriate Socket.IO event
+          if (parsed.type === 'chat') {
+            window.gameSocket.emit('chat_message', parsed);
+          } else if (parsed.type === 'game_event') {
+            window.gameSocket.emit('game_event', parsed);
+          } else {
+            window.gameSocket.emit('game_data', parsed);
+          }
+        } catch (e) {
+          window.gameSocket.emit('raw_data', data);
+        }
+      },
+      close: function() {
+        console.log('🔒 Mock WebSocket closed');
+      },
+      addEventListener: function(event, callback) {
+        console.log('🎧 Mock WebSocket listening for:', event);
+        
+        if (event === 'open') {
+          // Simulate immediate connection success
+          setTimeout(() => callback(new Event('open')), 100);
+        } else if (event === 'message') {
+          // Handle incoming Socket.IO messages
+          window.gameSocket.on('game_update', (data) => {
+            const messageEvent = new MessageEvent('message', {
+              data: JSON.stringify(data)
+            });
+            callback(messageEvent);
+          });
+        }
+      },
+      removeEventListener: function() {
+        console.log('🔕 Mock WebSocket removeEventListener');
+      }
+    };
+  }
+  
+  // Allow non-localhost WebSockets
+  return new originalWebSocket(url, protocols);
 };
 
-// Copy static properties to maintain Cocos compatibility
+// Copy WebSocket static properties
 window.WebSocket.CONNECTING = originalWebSocket.CONNECTING;
 window.WebSocket.OPEN = originalWebSocket.OPEN;
 window.WebSocket.CLOSING = originalWebSocket.CLOSING;
 window.WebSocket.CLOSED = originalWebSocket.CLOSED;
 
-console.log('✅ WebSocket redirect loaded successfully!');
-console.log('🎮 All WebSocket connections will go to:', RENDER_WEBSOCKET_URL);
+console.log('✅ Socket.IO connection fix loaded!');
+console.log('🎮 Game will use Socket.IO server:', SOCKET_SERVER_URL);
 
-// Additional fix for Socket.IO if game uses it
-if (typeof window.io !== 'undefined') {
-    console.log('🔧 Detected Socket.IO, applying redirect...');
-    const originalIo = window.io;
-    window.io = function(url, options) {
-        console.log('🎯 Socket.IO connection attempt to:', url);
-        
-        if (url && (url.includes('127.0.0.1') || url.includes('localhost'))) {
-            console.log('🔄 Redirecting Socket.IO to Render server');
-            return originalIo(RENDER_WEBSOCKET_URL, options);
-        }
-        
-        return originalIo(url, options);
-    };
-    console.log('✅ Socket.IO redirect applied');
-}
-
-// Game connection helper
-window.gameWebSocketInfo = {
-    server: RENDER_WEBSOCKET_URL,
-    status: 'ready',
-    version: '1.0.0',
-    game: 'Tai Xiu'
+// Global game socket helper
+window.connectToGameServer = function() {
+  return window.gameSocket;
 };
-
-console.log('🎲 Tai Xiu Game WebSocket setup complete!');
   </script>
 </head>
 <body>
