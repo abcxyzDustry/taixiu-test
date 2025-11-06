@@ -7,126 +7,71 @@ const fs = require('fs');
 const app = express();
 const port = process.env.PORT || 10000;
 
+// Chạy debug trước
+require('./render-build-debug');
+
 // Middleware
 app.use(cors());
 app.use(express.json());
-app.use(express.urlencoded({ extended: false }));
 
-// Serve static files từ public/ (VỊ TRÍ THẬT)
+// Serve static files với debug
 app.use(express.static('public', {
-    maxAge: '1d',
     setHeaders: (res, filePath) => {
-        if (filePath.endsWith('.js') || filePath.endsWith('.css') || filePath.endsWith('.html')) {
-            res.setHeader('Cache-Control', 'public, max-age=86400');
-        }
+        console.log(`📤 Serving static file: ${filePath}`);
     }
 }));
 
-// Kiểm tra file game THẬT
-console.log('🎮 KIỂM TRA FILE GAME TRÊN SERVER:');
-try {
-    if (fs.existsSync('./public')) {
-        const publicFiles = fs.readdirSync('./public');
-        console.log('📁 Toàn bộ file trong public/:', publicFiles);
-        
-        // Kiểm tra từng file quan trọng
-        const importantFiles = [
-            'index.html', 'main.js', 'cocos2d-js-min.js',
-            'web/', 'admin/'
-        ];
-        
-        importantFiles.forEach(file => {
-            const filePath = `./public/${file}`;
-            if (fs.existsSync(filePath)) {
-                const stat = fs.statSync(filePath);
-                if (stat.isDirectory()) {
-                    console.log(`✅ 📁 ${file}/ - TỒN TẠI`);
-                    // Hiển thị file trong thư mục con
-                    try {
-                        const subFiles = fs.readdirSync(filePath);
-                        console.log(`   📄 ${subFiles.join(', ')}`);
-                    } catch (e) {}
-                } else {
-                    const size = (stat.size / 1024 / 1024).toFixed(2);
-                    console.log(`✅ 📄 ${file} - ${size} MB`);
-                }
-            } else {
-                console.log(`❌ ${file} - KHÔNG TỒN TẠI`);
-            }
-        });
-        
-    } else {
-        console.log('❌ Thư mục public không tồn tại');
-    }
-} catch (e) {
-    console.log('❌ Lỗi khi kiểm tra file:', e.message);
-}
-
-// ROUTES - Sửa đường dẫn đúng
-
-// Route chính - dùng file trong public/ (không phải public/web/)
-app.get('/', (req, res) => {
-    console.log('🎯 Phục vụ game từ public/');
-    res.sendFile(path.join(__dirname, 'public', 'index.html'));
-});
-
-// Web version routes
-app.get('/web', (req, res) => {
-    console.log('📱 Phục vụ web version');
-    res.sendFile(path.join(__dirname, 'public', 'web', 'index.html'));
-});
-
-app.get('/web/*', (req, res) => {
-    res.sendFile(path.join(__dirname, 'public', 'web', 'index.html'));
-});
-
-// Admin version routes
-app.get('/admin', (req, res) => {
-    console.log('⚙️ Phục vụ admin version');
-    res.sendFile(path.join(__dirname, 'public', 'admin', 'index.html'));
-});
-
-app.get('/admin/*', (req, res) => {
-    res.sendFile(path.join(__dirname, 'public', 'admin', 'index.html'));
-});
-
-// API health check
-app.get('/api/health', (req, res) => {
-    const gameStatus = {
-        main: fs.existsSync('./public/index.html'),
-        web: fs.existsSync('./public/web/index.html'),
-        admin: fs.existsSync('./public/admin/index.html')
-    };
+// Route debug
+app.get('/debug', (req, res) => {
+    let debugInfo = '<h1>🔍 RENDER DEBUG INFO</h1>';
     
-    res.json({ 
-        status: 'healthy', 
-        message: 'RVIP.FUN Game Server - Files Found!',
-        game_files: gameStatus,
-        timestamp: new Date().toISOString()
-    });
+    try {
+        // Current directory
+        debugInfo += `<h2>Current Directory: ${__dirname}</h2>`;
+        debugInfo += `<pre>${JSON.stringify(fs.readdirSync(__dirname), null, 2)}</pre>`;
+        
+        // Public folder
+        const publicPath = './public';
+        if (fs.existsSync(publicPath)) {
+            debugInfo += `<h2>✅ Public Folder EXISTS</h2>`;
+            const publicFiles = fs.readdirSync(publicPath);
+            debugInfo += `<pre>${JSON.stringify(publicFiles, null, 2)}</pre>`;
+            
+            // Check each file
+            publicFiles.forEach(file => {
+                const filePath = path.join(publicPath, file);
+                const stat = fs.statSync(filePath);
+                debugInfo += `<p>${stat.isDirectory() ? '📁' : '📄'} ${file} - ${stat.size} bytes</p>`;
+            });
+        } else {
+            debugInfo += `<h2>❌ Public Folder NOT FOUND</h2>`;
+        }
+        
+    } catch (e) {
+        debugInfo += `<h2>❌ ERROR: ${e.message}</h2>`;
+    }
+    
+    res.send(debugInfo);
 });
 
-// Fallback - luôn trả về main game
-app.get('*', (req, res) => {
-    res.sendFile(path.join(__dirname, 'public', 'index.html'));
+// Routes
+app.get('/', (req, res) => {
+    console.log('🎯 Serving game from:', path.join(__dirname, 'public', 'index.html'));
+    
+    const gamePath = path.join(__dirname, 'public', 'index.html');
+    if (fs.existsSync(gamePath)) {
+        console.log('✅ Game file exists, sending...');
+        res.sendFile(gamePath);
+    } else {
+        console.log('❌ Game file NOT found at:', gamePath);
+        res.send(`
+            <h1>🎮 RVIP.FUN - File Debug</h1>
+            <p>Game file not found at: ${gamePath}</p>
+            <a href="/debug">View Debug Info</a>
+        `);
+    }
 });
 
-// Start server
 app.listen(port, '0.0.0.0', () => {
-    console.log('\n🎉 RVIP.FUN GAME SERVER ĐÃ KHỞI ĐỘNG');
-    console.log('✅ Port:', port);
-    console.log('🌐 URLs:');
-    console.log('   🎮 Main Game: https://one11bet-com.onrender.com');
-    console.log('   📱 Web Version: https://one11bet-com.onrender.com/web');
-    console.log('   ⚙️ Admin Version: https://one11bet-com.onrender.com/admin');
-    console.log('🎯 File game đã được tìm thấy trên GitHub!');
-});
-
-// Xử lý lỗi
-process.on('unhandledRejection', (err) => {
-    console.error('❌ Unhandled Promise Rejection:', err);
-});
-
-process.on('uncaughtException', (err) => {
-    console.error('❌ Uncaught Exception:', err);
+    console.log(`🚀 Debug Server running on port ${port}`);
 });
