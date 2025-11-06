@@ -1,37 +1,118 @@
-
 let bcrypt = require('bcrypt');
 let fs     = require('fs');
 var path   = require('path');
 
+// FIX: Hàm getConfig với xử lý lỗi
 let getConfig = function(config){
-	let text = fs.readFileSync('./config/' + config + '.json','utf8');
-	try{
-		text = JSON.parse(text);
-		return text;
-	}catch (e){
-		return null;
-	}
+    try {
+        let text = fs.readFileSync('./config/' + config + '.json','utf8');
+        try{
+            text = JSON.parse(text);
+            return text;
+        }catch (e){
+            console.log(`⚠️ Config file ./config/${config}.json parse error:`, e.message);
+            return null;
+        }
+    } catch (e) {
+        console.log(`⚠️ Config file ./config/${config}.json not found`);
+        return null;
+    }
 }
 
 let setConfig = function(config, data){
-	fs.writeFile(path.dirname(path.dirname(__dirname)) + '/config/' + config + '.json', JSON.stringify(data), function(err){});
-	data = null;
+    try {
+        // FIX: Đảm bảo thư mục config tồn tại
+        const configDir = path.dirname(path.dirname(__dirname)) + '/config';
+        if (!fs.existsSync(configDir)) {
+            fs.mkdirSync(configDir, { recursive: true });
+        }
+        fs.writeFile(configDir + '/' + config + '.json', JSON.stringify(data), function(err){});
+        data = null;
+    } catch (e) {
+        console.log(`❌ Cannot write config file: ${e.message}`);
+    }
 }
 
+// FIX: Hàm getData với xử lý lỗi và tạo file mặc định
 let getData = function(data){
-	let text = fs.readFileSync('./data/' + data + '.json','utf8');
-	try{
-		text = JSON.parse(text);
-		return text;
-	}catch (e){
-		return null;
-	}
+    try {
+        let text = fs.readFileSync('./data/' + data + '.json','utf8');
+        try{
+            text = JSON.parse(text);
+            return text;
+        }catch (e){
+            console.log(`⚠️ Data file ./data/${data}.json parse error:`, e.message);
+            return getDefaultData(data);
+        }
+    } catch (e) {
+        console.log(`⚠️ Data file ./data/${data}.json not found, creating default`);
+        return getDefaultData(data);
+    }
 }
 
-let setData = function(config, data){
-	fs.writeFile(path.dirname(path.dirname(__dirname)) + '/data/' + config + '.json', JSON.stringify(data), function(err){});
-	data = null;
+// FIX: Hàm getDefaultData để tạo dữ liệu mặc định
+let getDefaultData = function(name) {
+    const defaults = {
+        'taixiu': { "dice1": 0, "dice2": 0, "dice3": 0, "uid": "", "rights": 2 },
+        'baucua': [6, 6, 6],
+        'xocxoc': { "dice1": 0, "dice2": 0, "dice3": 0, "uid": "", "rights": 2 },
+        'rongho': { "dice1": 0, "dice2": 0, "dice3": 0, "uid": "", "rights": 2 }
+    };
+    
+    const defaultData = defaults[name] || {};
+    
+    // Tự động tạo file nếu không tồn tại
+    setData(name, defaultData);
+    
+    return defaultData;
 }
+
+// FIX: Hàm setData với xử lý lỗi
+let setData = function(config, data){
+    try {
+        // FIX: Đảm bảo thư mục data tồn tại
+        const dataDir = './data';
+        if (!fs.existsSync(dataDir)) {
+            fs.mkdirSync(dataDir, { recursive: true });
+        }
+        fs.writeFileSync(dataDir + '/' + config + '.json', JSON.stringify(data, null, 2));
+        console.log(`✅ Data file ./data/${config}.json updated`);
+    } catch (e) {
+        console.log(`❌ Cannot write data file: ${e.message}`);
+    }
+    data = null;
+}
+
+// FIX: Khởi tạo các file data khi module được load
+const initDataFiles = () => {
+    try {
+        const dataDir = './data';
+        if (!fs.existsSync(dataDir)) {
+            fs.mkdirSync(dataDir, { recursive: true });
+            console.log('✅ Created data directory');
+        }
+        
+        const dataFiles = {
+            'taixiu.json': { "dice1": 0, "dice2": 0, "dice3": 0, "uid": "", "rights": 2 },
+            'baucua.json': [6, 6, 6],
+            'xocxoc.json': { "dice1": 0, "dice2": 0, "dice3": 0, "uid": "", "rights": 2 },
+            'rongho.json': { "dice1": 0, "dice2": 0, "dice3": 0, "uid": "", "rights": 2 }
+        };
+        
+        Object.entries(dataFiles).forEach(([filename, content]) => {
+            const filepath = `${dataDir}/${filename}`;
+            if (!fs.existsSync(filepath)) {
+                fs.writeFileSync(filepath, JSON.stringify(content, null, 2));
+                console.log(`✅ Created ${filename}`);
+            }
+        });
+    } catch (e) {
+        console.log('❌ Error initializing data files:', e.message);
+    }
+};
+
+// Gọi hàm khởi tạo khi module được require
+initDataFiles();
 
 // mã hóa pass
 let generateHash = function(password) {
@@ -168,20 +249,27 @@ let shuffle = function(array) {
 }
 
 let ThongBaoNoHu = function(io, data){
-	io.clients.forEach(function(client){
-		if (void 0 === client.admin && (client.auth === false || client.scene === 'home')) {
-			client.red({pushnohu:data});
-		}
-	});
+    // FIX: Thêm check cho io.clients
+    if (io && io.clients) {
+        io.clients.forEach(function(client){
+            if (void 0 === client.admin && (client.auth === false || client.scene === 'home')) {
+                client.red({pushnohu:data});
+            }
+        });
+    }
 }
 
 let ThongBaoBigWin = function(io, data){
-	io.clients.forEach(function(client){
-		if (void 0 === client.admin && (client.auth === false || client.scene === 'home')) {
-			client.red({news:{t:data}});
-		}
-	});
+    // FIX: Thêm check cho io.clients
+    if (io && io.clients) {
+        io.clients.forEach(function(client){
+            if (void 0 === client.admin && (client.auth === false || client.scene === 'home')) {
+                client.red({news:{t:data}});
+            }
+        });
+    }
 }
+
 let pushDailyVIP = function(obj){
 	var VIPServices = require('../Models/VIPServices');
 	var DaiLy = require('../Models/DaiLy');
@@ -227,6 +315,7 @@ let pushDailyVIP = function(obj){
 		}
 	})
 }
+
 let RandomUserName = function(length){
 var result           = '';
    var characters       = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
@@ -236,6 +325,7 @@ var result           = '';
    }
    return result;
 }
+
 let MissionAddCurrent = function(uid,amount) {
 	let UserMission = require('../Models/UserMission');
 	UserMission.findOne({uid:uid,active:true,achived2:false},{},{sort:{time:-1}},function(err,update){
@@ -243,6 +333,7 @@ let MissionAddCurrent = function(uid,amount) {
 			UserMission.updateOne({_id:update._id},{$inc:{current:amount}}).exec();
 	})
 }
+
 let _formatMoneyVND = (num, digits) => {
   const si = [
     { value: 1, symbol: "" },
