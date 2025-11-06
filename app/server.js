@@ -17,6 +17,58 @@ app.use(express.json());
 // Đường dẫn public
 const publicPath = path.join(__dirname, '..', 'public');
 
+// ==================== FIX COCOS ASSETS PATH ====================
+// Route fix cho assets Cocos - thêm /00/ vào đường dẫn
+app.get('/res/raw-assets/:folder/:file', (req, res) => {
+    const { folder, file } = req.params;
+    const assetPath = path.join(publicPath, 'web', 'res', 'raw-assets', '00', folder, file);
+    
+    console.log(`🎯 Fixing asset path: ${folder}/${file} -> 00/${folder}/${file}`);
+    
+    if (fs.existsSync(assetPath)) {
+        res.set('Access-Control-Allow-Origin', '*');
+        res.set('Cache-Control', 'public, max-age=31536000');
+        res.sendFile(assetPath);
+        console.log(`✅ Served: ${assetPath}`);
+    } else {
+        console.log(`❌ Asset not found: ${assetPath}`);
+        
+        // Fallback: thử đường dẫn không có /00/
+        const fallbackPath = path.join(publicPath, 'web', 'res', 'raw-assets', folder, file);
+        if (fs.existsSync(fallbackPath)) {
+            res.set('Access-Control-Allow-Origin', '*');
+            res.set('Cache-Control', 'public, max-age=31536000');
+            res.sendFile(fallbackPath);
+            console.log(`✅ Served fallback: ${fallbackPath}`);
+        } else {
+            res.status(404).send('Asset not found');
+        }
+    }
+});
+
+// Route fix cho web/res/raw-assets/
+app.get('/web/res/raw-assets/:folder/:file', (req, res) => {
+    const { folder, file } = req.params;
+    const assetPath = path.join(publicPath, 'web', 'res', 'raw-assets', '00', folder, file);
+    
+    if (fs.existsSync(assetPath)) {
+        res.set('Access-Control-Allow-Origin', '*');
+        res.set('Cache-Control', 'public, max-age=31536000');
+        res.sendFile(assetPath);
+    } else {
+        // Fallback
+        const fallbackPath = path.join(publicPath, 'web', 'res', 'raw-assets', folder, file);
+        if (fs.existsSync(fallbackPath)) {
+            res.set('Access-Control-Allow-Origin', '*');
+            res.set('Cache-Control', 'public, max-age=31536000');
+            res.sendFile(fallbackPath);
+        } else {
+            res.status(404).send('Asset not found');
+        }
+    }
+});
+// ==================== END FIX ====================
+
 // Phục vụ static files với CORS và cache optimization cho Cocos 2.x
 app.use(express.static(publicPath, {
     etag: false,
@@ -195,6 +247,31 @@ app.get('/debug', (req, res) => {
         </body>
         </html>
     `;
+    
+    res.send(debugInfo);
+});
+
+// Route debug assets
+app.get('/debug-assets', (req, res) => {
+    const testAssets = [
+        'f5/f5ba02e3-3543-45e9-b1eb-6649bf3ad413.png',
+        '42/42fa96cc-d624-4aaa-8246-95de1906f1f6.png',
+        '73/735cb688-d4a0-405a-9fea-33e79e15c9bb.png'
+    ];
+    
+    let debugInfo = '<h1>🔍 ASSETS DEBUG</h1>';
+    
+    testAssets.forEach(asset => {
+        const [folder, file] = asset.split('/');
+        
+        debugInfo += `<h3>Testing: ${asset}</h3>`;
+        
+        const pathWith00 = path.join(publicPath, 'web', 'res', 'raw-assets', '00', folder, file);
+        const pathDirect = path.join(publicPath, 'web', 'res', 'raw-assets', folder, file);
+        
+        debugInfo += `<p>With 00/: ${pathWith00} - ${fs.existsSync(pathWith00) ? '✅ EXISTS' : '❌ MISSING'}</p>`;
+        debugInfo += `<p>Direct: ${pathDirect} - ${fs.existsSync(pathDirect) ? '✅ EXISTS' : '❌ MISSING'}</p>`;
+    });
     
     res.send(debugInfo);
 });
