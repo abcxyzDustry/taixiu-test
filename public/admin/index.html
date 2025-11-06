@@ -2,43 +2,100 @@
 <html>
 <head>
   <meta charset="utf-8">
-
-  <title>muagamebai.com</title>
-
-  <!--http://www.html5rocks.com/en/mobile/mobifying/-->
-  <meta name="viewport"
-        content="width=device-width,user-scalable=no,initial-scale=1, minimum-scale=1,maximum-scale=1"/>
-
-  <!--https://developer.apple.com/library/safari/documentation/AppleApplications/Reference/SafariHTMLRef/Articles/MetaTags.html-->
+  <title>muagamebai.com - Admin</title>
+  
+  <!-- Các meta tags giống nguyên bản -->
+  <meta name="viewport" content="width=device-width,user-scalable=no,initial-scale=1, minimum-scale=1,maximum-scale=1"/>
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="format-detection" content="telephone=no">
-
-  <!-- force webkit on 360 -->
   <meta name="renderer" content="webkit"/>
   <meta name="force-rendering" content="webkit"/>
-  <!-- force edge on IE -->
   <meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1"/>
   <meta name="msapplication-tap-highlight" content="no">
-
-  <!-- force full screen on some browser -->
   <meta name="full-screen" content="yes"/>
   <meta name="x5-fullscreen" content="true"/>
   <meta name="360-fullscreen" content="true"/>
-  
-  <!-- force screen orientation on some browser -->
   <meta name="screen-orientation" content=""/>
   <meta name="x5-orientation" content="">
-
-  <!--fix fireball/issues/3568 -->
-  <!--<meta name="browsermode" content="application">-->
   <meta name="x5-page-mode" content="app">
-
-  <!--<link rel="apple-touch-icon" href=".png" />-->
-  <!--<link rel="apple-touch-icon-precomposed" href=".png" />-->
 
   <link rel="stylesheet" type="text/css" href="style-mobile.css"/>
   <link rel="icon" href="favicon.ico"/>
+
+  <!-- 🚀 WEBSOCKET FIX CHO ADMIN PANEL -->
+  <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
+  <script>
+// 🎮 WebSocket Fix for Admin Panel (Cocos Game)
+console.log('🔧 Loading Admin Panel WebSocket Fix...');
+
+const SOCKET_SERVER_URL = 'https://one11bet-websocket.onrender.com';
+
+// Global Socket.IO instance for Admin
+window.adminSocket = io(SOCKET_SERVER_URL, {
+  transports: ['websocket', 'polling'],
+  reconnection: true,
+  reconnectionAttempts: 5,
+  reconnectionDelay: 1000
+});
+
+// Socket event handlers
+window.adminSocket.on('connect', () => {
+  console.log('✅ Admin Panel connected to Socket.IO server');
+});
+
+window.adminSocket.on('disconnect', () => {
+  console.log('❌ Admin Panel disconnected');
+});
+
+// WebSocket Blocker for localhost
+const originalWebSocket = window.WebSocket;
+window.WebSocket = function(url, protocols) {
+  console.log('🎯 Admin WebSocket attempt to:', url);
+  
+  if (url && (url.includes('127.0.0.1') || url.includes('localhost'))) {
+    console.log('🔄 Blocking localhost WebSocket in Admin');
+    
+    return {
+      readyState: 1, // OPEN
+      send: function(data) {
+        console.log('📤 Admin WebSocket send intercepted');
+        // Route to Socket.IO if needed
+        if (window.adminSocket && window.adminSocket.connected) {
+          try {
+            const parsed = JSON.parse(data);
+            window.adminSocket.emit('admin_data', parsed);
+          } catch (e) {
+            window.adminSocket.emit('raw_data', data);
+          }
+        }
+      },
+      close: function() {
+        console.log('🔒 Admin WebSocket closed');
+      },
+      addEventListener: function(event, callback) {
+        console.log('🎧 Admin WebSocket listening for:', event);
+        if (event === 'open') {
+          setTimeout(() => callback(new Event('open')), 100);
+        }
+      },
+      removeEventListener: function() {
+        console.log('🔕 Admin WebSocket removeEventListener');
+      }
+    };
+  }
+  
+  return new originalWebSocket(url, protocols);
+};
+
+// Copy static properties
+window.WebSocket.CONNECTING = originalWebSocket.CONNECTING;
+window.WebSocket.OPEN = originalWebSocket.OPEN;
+window.WebSocket.CLOSING = originalWebSocket.CLOSING;
+window.WebSocket.CLOSED = originalWebSocket.CLOSED;
+
+console.log('✅ Admin Panel WebSocket Fix loaded!');
+  </script>
 </head>
 <body>
   <canvas id="GameCanvas" oncontextmenu="event.preventDefault()" tabindex="0"></canvas>
@@ -49,12 +106,10 @@
   </div>
 
 <script src="src/settings.js" charset="utf-8"></script>
-
 <script src="main.js" charset="utf-8"></script>
 
 <script type="text/javascript">
 (function () {
-    // open web debugger console
     if (typeof VConsole !== 'undefined') {
         window.vConsole = new VConsole();
     }
