@@ -12,109 +12,87 @@ app.use(cors());
 app.use(express.json());
 app.use(express.urlencoded({ extended: false }));
 
-// FIXED: Chỉ tạo thư mục public nếu chưa có, KHÔNG tạo file mặc định
-const ensurePublicDir = () => {
-    const publicDir = './public';
-    if (!fs.existsSync(publicDir)) {
-        fs.mkdirSync(publicDir, { recursive: true });
-        console.log('✅ Đã tạo thư mục public');
-        // KHÔNG tạo file index.html mặc định - để dùng file từ GitHub
-    }
-};
+// Serve static files từ cả public/web/ và public/admin/
+app.use('/web', express.static('public/web'));
+app.use('/admin', express.static('public/admin'));
 
-// Gọi hàm đảm bảo thư mục tồn tại
-ensurePublicDir();
+// Kiểm tra cả 2 version game
+console.log('🎮 KIỂM TRA CÁC VERSION GAME:');
 
-// Serve static files từ public
-app.use(express.static('public', {
-    maxAge: '1d',
-    setHeaders: (res, filePath) => {
-        if (filePath.endsWith('.js') || filePath.endsWith('.css') || filePath.endsWith('.html')) {
-            res.setHeader('Cache-Control', 'public, max-age=86400');
-        }
-    }
-}));
-
-// Kiểm tra file game THẬT trong public
-console.log('🎮 KIỂM TRA FILE GAME COCOS2D:');
-try {
-    if (fs.existsSync('./public')) {
-        const publicFiles = fs.readdirSync('./public');
-        
-        // Kiểm tra có file game Cocos2d không
-        const hasCocos2d = publicFiles.includes('cocos2d-js-min.js') || publicFiles.includes('cocos2d-js.js');
-        const hasGameFiles = publicFiles.includes('main.js') && publicFiles.includes('index.html');
-        
-        if (hasCocos2d && hasGameFiles) {
-            console.log('✅ ĐÃ TÌM THẤY GAME COCOS2D HOÀN CHỈNH!');
-            console.log('📁 Cấu trúc game:');
-            
-            publicFiles.forEach(file => {
-                const filePath = `./public/${file}`;
-                const stat = fs.statSync(filePath);
-                if (stat.isDirectory()) {
-                    console.log(`   📁 ${file}/`);
-                    // Hiển thị file trong folder con
-                    try {
-                        const subFiles = fs.readdirSync(filePath);
-                        subFiles.forEach(subFile => {
-                            console.log(`      📄 ${subFile}`);
-                        });
-                    } catch (e) {}
-                } else {
-                    const sizeKB = (stat.size / 1024).toFixed(2);
-                    const sizeMB = (stat.size / 1024 / 1024).toFixed(2);
-                    const size = stat.size > 1024 * 1024 ? `${sizeMB} MB` : `${sizeKB} KB`;
-                    console.log(`   📄 ${file} (${size})`);
-                }
-            });
-        } else {
-            console.log('❌ KHÔNG tìm thấy file game Cocos2d');
-            console.log('💡 Các file hiện có:', publicFiles);
-            console.log('🚨 VUI LÒNG UPLOAD FILE GAME TỪ PCLOUD LÊN GITHUB!');
-        }
-    } else {
-        console.log('❌ Thư mục public không tồn tại');
-    }
-} catch (e) {
-    console.log('❌ Lỗi khi kiểm tra file game:', e.message);
+// Kiểm tra web version
+console.log('\n📱 WEB VERSION (public/web/):');
+if (fs.existsSync('./public/web')) {
+    const webFiles = fs.readdirSync('./public/web');
+    const hasWebGame = webFiles.includes('cocos2d-js-min.js') && webFiles.includes('index.html');
+    console.log(hasWebGame ? '✅ CÓ' : '❌ KHÔNG', 'file game web');
+    console.log('   Files:', webFiles);
+} else {
+    console.log('❌ Thư mục web không tồn tại');
 }
 
-// Routes
+// Kiểm tra admin version
+console.log('\n⚙️ ADMIN VERSION (public/admin/):');
+if (fs.existsSync('./public/admin')) {
+    const adminFiles = fs.readdirSync('./public/admin');
+    const hasAdminGame = adminFiles.includes('cocos2d-js-min.js') && adminFiles.includes('index.html');
+    console.log(hasAdminGame ? '✅ CÓ' : '❌ KHÔNG', 'file game admin');
+    console.log('   Files:', adminFiles);
+} else {
+    console.log('❌ Thư mục admin không tồn tại');
+}
+
+// ROUTES - Chọn version mặc định
+
+// Mặc định: dùng WEB version cho người dùng
 app.get('/', (req, res) => {
-    console.log('🎯 Phục vụ game Cocos2d cho client');
-    res.sendFile(path.join(__dirname, 'public', 'index.html'));
+    console.log('🎯 Phục vụ WEB version cho người dùng');
+    res.sendFile(path.join(__dirname, 'public', 'web', 'index.html'));
 });
 
-app.get('/game', (req, res) => {
-    res.sendFile(path.join(__dirname, 'public', 'index.html'));
+// Web version
+app.get('/web', (req, res) => {
+    res.sendFile(path.join(__dirname, 'public', 'web', 'index.html'));
 });
 
-app.get('/play', (req, res) => {
-    res.sendFile(path.join(__dirname, 'public', 'index.html'));
+app.get('/web/*', (req, res) => {
+    res.sendFile(path.join(__dirname, 'public', 'web', 'index.html'));
 });
 
-// API backend (giữ lại cho game)
+// Admin version
+app.get('/admin', (req, res) => {
+    res.sendFile(path.join(__dirname, 'public', 'admin', 'index.html'));
+});
+
+app.get('/admin/*', (req, res) => {
+    res.sendFile(path.join(__dirname, 'public', 'admin', 'index.html'));
+});
+
+// API health check
 app.get('/api/health', (req, res) => {
     res.json({ 
         status: 'healthy', 
-        message: 'RVIP.FUN Game Server',
-        timestamp: new Date().toISOString(),
-        games: ['Tài Xỉu', 'Bầu Cua', 'Mini Poker', 'Bắn Cá']
+        message: 'RVIP.FUN Multi-version Game Server',
+        versions: {
+            web: fs.existsSync('./public/web/index.html'),
+            admin: fs.existsSync('./public/admin/index.html')
+        },
+        timestamp: new Date().toISOString()
     });
 });
 
-// Fallback - luôn trả về game
+// Fallback - luôn trả về web version
 app.get('*', (req, res) => {
-    res.sendFile(path.join(__dirname, 'public', 'index.html'));
+    res.sendFile(path.join(__dirname, 'public', 'web', 'index.html'));
 });
 
 // Start server
 app.listen(port, '0.0.0.0', () => {
-    console.log('\n🎉 RVIP.FUN COCOS2D GAME SERVER ĐÃ KHỞI ĐỘNG');
+    console.log('\n🎉 RVIP.FUN MULTI-VERSION GAME SERVER ĐÃ KHỞI ĐỘNG');
     console.log('✅ Port:', port);
-    console.log('🌐 URL: https://one11bet-com.onrender.com');
-    console.log('📱 Game Cocos2d ready!');
+    console.log('🌐 URLs:');
+    console.log('   📱 Người dùng: https://one11bet-com.onrender.com');
+    console.log('   📱 Web version: https://one11bet-com.onrender.com/web');
+    console.log('   ⚙️ Admin version: https://one11bet-com.onrender.com/admin');
 });
 
 // Xử lý lỗi
