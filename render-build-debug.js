@@ -9,21 +9,19 @@ console.log('\n1. 📁 CURRENT DIRECTORY:');
 console.log('   Path:', __dirname);
 console.log('   Files:', fs.readdirSync(__dirname));
 
-// 2. Kiểm tra parent directory
+// 2. Kiểm tra parent directory và tìm public
 console.log('\n2. 📁 PARENT DIRECTORY:');
 try {
-    const parentFiles = fs.readdirSync(path.join(__dirname, '..'));
+    const parentPath = path.join(__dirname, '..');
+    const parentFiles = fs.readdirSync(parentPath);
     console.log('   Files:', parentFiles);
-} catch (e) {
-    console.log('   ❌ Error:', e.message);
-}
-
-// 3. Kiểm tra public folder chi tiết
-console.log('\n3. 📁 PUBLIC FOLDER ANALYSIS:');
-const publicPath = './public';
-try {
+    
+    // 3. Kiểm tra public folder trong parent directory
+    console.log('\n3. 📁 PUBLIC FOLDER ANALYSIS:');
+    const publicPath = path.join(parentPath, 'public'); // SỬA Ở ĐÂY
+    
     if (fs.existsSync(publicPath)) {
-        console.log('   ✅ public/ EXISTS');
+        console.log('   ✅ public/ EXISTS at:', publicPath);
         const publicFiles = fs.readdirSync(publicPath);
         console.log('   Files in public/:', publicFiles);
         
@@ -31,43 +29,28 @@ try {
         publicFiles.forEach(file => {
             const filePath = path.join(publicPath, file);
             const stat = fs.statSync(filePath);
-            console.log(`   ${stat.isDirectory() ? '📁' : '📄'} ${file} - ${stat.size} bytes`);
+            console.log(`   ${stat.isDirectory() ? '📁' : '📄'} ${file}`);
             
             // Nếu là folder, kiểm tra bên trong
             if (stat.isDirectory()) {
                 try {
                     const subFiles = fs.readdirSync(filePath);
                     console.log(`      📄 ${subFiles.slice(0, 5).join(', ')}${subFiles.length > 5 ? '...' : ''}`);
+                    
+                    // Kiểm tra xem có index.html không
+                    if (subFiles.includes('index.html')) {
+                        console.log(`      ✅ FOUND index.html in ${file}/`);
+                    }
                 } catch (e) {
                     console.log(`      ❌ Cannot read: ${e.message}`);
                 }
             }
         });
     } else {
-        console.log('   ❌ public/ DOES NOT EXIST');
-        
-        // Kiểm tra các folder khác
-        console.log('\n4. 🔍 SEARCHING FOR GAME FILES:');
-        const allFiles = fs.readdirSync('.');
-        allFiles.forEach(file => {
-            if (file.includes('cocos') || file.includes('game') || file.includes('web')) {
-                console.log(`   🔎 Found: ${file}`);
-            }
-        });
+        console.log('   ❌ public/ DOES NOT EXIST at:', publicPath);
     }
 } catch (e) {
-    console.log('   ❌ Error accessing public/:', e.message);
-}
-
-// 4. Kiểm tra file permissions
-console.log('\n4. 🔐 FILE PERMISSIONS:');
-try {
-    if (fs.existsSync(publicPath)) {
-        fs.accessSync(publicPath, fs.constants.R_OK);
-        console.log('   ✅ public/ is readable');
-    }
-} catch (e) {
-    console.log('   ❌ public/ is NOT readable:', e.message);
+    console.log('   ❌ Error:', e.message);
 }
 
 console.log('\n================================');
