@@ -12,46 +12,13 @@ app.use(cors());
 app.use(express.json());
 app.use(express.urlencoded({ extended: false }));
 
-// FIX: Kiểm tra và tạo thư mục public nếu chưa có
+// FIXED: Chỉ tạo thư mục public nếu chưa có, KHÔNG tạo file mặc định
 const ensurePublicDir = () => {
     const publicDir = './public';
     if (!fs.existsSync(publicDir)) {
         fs.mkdirSync(publicDir, { recursive: true });
         console.log('✅ Đã tạo thư mục public');
-        
-        // Tạo file index.html mặc định nếu chưa có
-        const defaultHtml = `
-<!DOCTYPE html>
-<html>
-<head>
-    <title>Game Server</title>
-    <style>
-        body { 
-            font-family: Arial; 
-            background: #1a1a1a; 
-            color: white; 
-            text-align: center; 
-            padding: 50px; 
-        }
-        .container { 
-            background: #2a2a2a; 
-            padding: 40px; 
-            border-radius: 10px; 
-            display: inline-block; 
-        }
-    </style>
-</head>
-<body>
-    <div class="container">
-        <h1>🎮 Game Server</h1>
-        <p>Server đang hoạt động!</p>
-        <p>Thêm file game vào thư mục public</p>
-    </div>
-</body>
-</html>`;
-        
-        fs.writeFileSync(path.join(publicDir, 'index.html'), defaultHtml);
-        console.log('✅ Đã tạo file index.html mặc định');
+        // KHÔNG tạo file index.html mặc định - để dùng file từ GitHub
     }
 };
 
@@ -68,31 +35,54 @@ app.use(express.static('public', {
     }
 }));
 
-// Kiểm tra file trong public (với xử lý lỗi)
-console.log('🎮 Kiểm tra file game:');
+// Kiểm tra file game THẬT trong public
+console.log('🎮 KIỂM TRA FILE GAME COCOS2D:');
 try {
-    const publicFiles = fs.readdirSync('./public');
-    if (publicFiles.length === 0) {
-        console.log('📁 Thư mục public trống');
+    if (fs.existsSync('./public')) {
+        const publicFiles = fs.readdirSync('./public');
+        
+        // Kiểm tra có file game Cocos2d không
+        const hasCocos2d = publicFiles.includes('cocos2d-js-min.js') || publicFiles.includes('cocos2d-js.js');
+        const hasGameFiles = publicFiles.includes('main.js') && publicFiles.includes('index.html');
+        
+        if (hasCocos2d && hasGameFiles) {
+            console.log('✅ ĐÃ TÌM THẤY GAME COCOS2D HOÀN CHỈNH!');
+            console.log('📁 Cấu trúc game:');
+            
+            publicFiles.forEach(file => {
+                const filePath = `./public/${file}`;
+                const stat = fs.statSync(filePath);
+                if (stat.isDirectory()) {
+                    console.log(`   📁 ${file}/`);
+                    // Hiển thị file trong folder con
+                    try {
+                        const subFiles = fs.readdirSync(filePath);
+                        subFiles.forEach(subFile => {
+                            console.log(`      📄 ${subFile}`);
+                        });
+                    } catch (e) {}
+                } else {
+                    const sizeKB = (stat.size / 1024).toFixed(2);
+                    const sizeMB = (stat.size / 1024 / 1024).toFixed(2);
+                    const size = stat.size > 1024 * 1024 ? `${sizeMB} MB` : `${sizeKB} KB`;
+                    console.log(`   📄 ${file} (${size})`);
+                }
+            });
+        } else {
+            console.log('❌ KHÔNG tìm thấy file game Cocos2d');
+            console.log('💡 Các file hiện có:', publicFiles);
+            console.log('🚨 VUI LÒNG UPLOAD FILE GAME TỪ PCLOUD LÊN GITHUB!');
+        }
     } else {
-        publicFiles.forEach(file => {
-            const filePath = `./public/${file}`;
-            const stat = fs.statSync(filePath);
-            if (stat.isDirectory()) {
-                console.log(`📁 ${file}/`);
-            } else {
-                const size = (stat.size / 1024).toFixed(2);
-                console.log(`📄 ${file} (${size} KB)`);
-            }
-        });
+        console.log('❌ Thư mục public không tồn tại');
     }
 } catch (e) {
-    console.log('❌ Lỗi khi đọc thư mục public:', e.message);
+    console.log('❌ Lỗi khi kiểm tra file game:', e.message);
 }
 
 // Routes
 app.get('/', (req, res) => {
-    console.log('🎯 Phục vụ game cho:', req.headers['user-agent']);
+    console.log('🎯 Phục vụ game Cocos2d cho client');
     res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
 
@@ -121,9 +111,17 @@ app.get('*', (req, res) => {
 
 // Start server
 app.listen(port, '0.0.0.0', () => {
-    console.log('\n🎉 RVIP.FUN GAME SERVER ĐÃ KHỞI ĐỘNG');
+    console.log('\n🎉 RVIP.FUN COCOS2D GAME SERVER ĐÃ KHỞI ĐỘNG');
     console.log('✅ Port:', port);
     console.log('🌐 URL: https://one11bet-com.onrender.com');
-    console.log('📱 Game ready trên mọi thiết bị');
-    console.log('🎮 Phục vụ file từ thư mục public/');
+    console.log('📱 Game Cocos2d ready!');
+});
+
+// Xử lý lỗi
+process.on('unhandledRejection', (err) => {
+    console.error('❌ Unhandled Promise Rejection:', err);
+});
+
+process.on('uncaughtException', (err) => {
+    console.error('❌ Uncaught Exception:', err);
 });
