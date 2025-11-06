@@ -14,8 +14,11 @@ require('./render-build-debug');
 app.use(cors());
 app.use(express.json());
 
+// QUAN TRỌNG: Sửa đường dẫn public - dùng '../public' thay vì 'public'
+const publicPath = path.join(__dirname, '..', 'public');
+
 // Serve static files với debug
-app.use(express.static('public', {
+app.use(express.static(publicPath, {
     setHeaders: (res, filePath) => {
         console.log(`📤 Serving static file: ${filePath}`);
     }
@@ -30,10 +33,9 @@ app.get('/debug', (req, res) => {
         debugInfo += `<h2>Current Directory: ${__dirname}</h2>`;
         debugInfo += `<pre>${JSON.stringify(fs.readdirSync(__dirname), null, 2)}</pre>`;
         
-        // Public folder
-        const publicPath = './public';
+        // Public folder - SỬA ĐƯỜNG DẪN
         if (fs.existsSync(publicPath)) {
-            debugInfo += `<h2>✅ Public Folder EXISTS</h2>`;
+            debugInfo += `<h2>✅ Public Folder EXISTS at: ${publicPath}</h2>`;
             const publicFiles = fs.readdirSync(publicPath);
             debugInfo += `<pre>${JSON.stringify(publicFiles, null, 2)}</pre>`;
             
@@ -42,9 +44,19 @@ app.get('/debug', (req, res) => {
                 const filePath = path.join(publicPath, file);
                 const stat = fs.statSync(filePath);
                 debugInfo += `<p>${stat.isDirectory() ? '📁' : '📄'} ${file} - ${stat.size} bytes</p>`;
+                
+                // Kiểm tra xem có index.html trong thư mục con không
+                if (stat.isDirectory()) {
+                    const indexPath = path.join(filePath, 'index.html');
+                    if (fs.existsSync(indexPath)) {
+                        debugInfo += `<p style="color: green;">✅ Found index.html in ${file}/</p>`;
+                    } else {
+                        debugInfo += `<p style="color: orange;">⚠️ No index.html in ${file}/</p>`;
+                    }
+                }
             });
         } else {
-            debugInfo += `<h2>❌ Public Folder NOT FOUND</h2>`;
+            debugInfo += `<h2>❌ Public Folder NOT FOUND at: ${publicPath}</h2>`;
         }
         
     } catch (e) {
@@ -54,24 +66,54 @@ app.get('/debug', (req, res) => {
     res.send(debugInfo);
 });
 
-// Routes
+// Routes chính - SỬA ĐƯỜNG DẪN
 app.get('/', (req, res) => {
-    console.log('🎯 Serving game from:', path.join(__dirname, 'public', 'index.html'));
+    const webIndexPath = path.join(publicPath, 'web', 'index.html');
+    console.log('🎯 Serving web from:', webIndexPath);
     
-    const gamePath = path.join(__dirname, 'public', 'index.html');
-    if (fs.existsSync(gamePath)) {
-        console.log('✅ Game file exists, sending...');
-        res.sendFile(gamePath);
+    if (fs.existsSync(webIndexPath)) {
+        console.log('✅ Web file exists, sending...');
+        res.sendFile(webIndexPath);
     } else {
-        console.log('❌ Game file NOT found at:', gamePath);
+        console.log('❌ Web file NOT found at:', webIndexPath);
         res.send(`
-            <h1>🎮 RVIP.FUN - File Debug</h1>
-            <p>Game file not found at: ${gamePath}</p>
-            <a href="/debug">View Debug Info</a>
+            <h1>🎮 DEBUG - File Not Found</h1>
+            <p>Web file not found at: ${webIndexPath}</p>
+            <p>Public path: ${publicPath}</p>
+            <a href="/debug">View Detailed Debug Info</a>
         `);
+    }
+});
+
+// Route cho admin - THÊM MỚI
+app.get('/admin', (req, res) => {
+    const adminIndexPath = path.join(publicPath, 'admin', 'index.html');
+    console.log('🎯 Serving admin from:', adminIndexPath);
+    
+    if (fs.existsSync(adminIndexPath)) {
+        console.log('✅ Admin file exists, sending...');
+        res.sendFile(adminIndexPath);
+    } else {
+        console.log('❌ Admin file NOT found at:', adminIndexPath);
+        res.redirect('/debug');
+    }
+});
+
+// Route cho web explicit - THÊM MỚI
+app.get('/web', (req, res) => {
+    const webIndexPath = path.join(publicPath, 'web', 'index.html');
+    console.log('🎯 Serving web from:', webIndexPath);
+    
+    if (fs.existsSync(webIndexPath)) {
+        res.sendFile(webIndexPath);
+    } else {
+        res.redirect('/debug');
     }
 });
 
 app.listen(port, '0.0.0.0', () => {
     console.log(`🚀 Debug Server running on port ${port}`);
+    console.log(`📁 Public path: ${publicPath}`);
+    console.log(`🎯 Web: ${path.join(publicPath, 'web', 'index.html')}`);
+    console.log(`🎯 Admin: ${path.join(publicPath, 'admin', 'index.html')}`);
 });
