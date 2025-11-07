@@ -1,145 +1,51 @@
 <!DOCTYPE html>
 <html>
 <head>
-  <meta charset="utf-8">
-  <title>muagamebai.com - Admin</title>
-  
-  <!-- Các meta tags giống nguyên bản -->
-  <meta name="viewport" content="width=device-width,user-scalable=no,initial-scale=1, minimum-scale=1,maximum-scale=1"/>
-  <meta name="apple-mobile-web-app-capable" content="yes">
-  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-  <meta name="format-detection" content="telephone=no">
-  <meta name="renderer" content="webkit"/>
-  <meta name="force-rendering" content="webkit"/>
-  <meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1"/>
-  <meta name="msapplication-tap-highlight" content="no">
-  <meta name="full-screen" content="yes"/>
-  <meta name="x5-fullscreen" content="true"/>
-  <meta name="360-fullscreen" content="true"/>
-  <meta name="screen-orientation" content=""/>
-  <meta name="x5-orientation" content="">
-  <meta name="x5-page-mode" content="app">
-
-  <link rel="stylesheet" type="text/css" href="style-mobile.css"/>
-  <link rel="icon" href="favicon.ico"/>
-
-  <!-- 🚀 WEBSOCKET FIX CHO ADMIN PANEL -->
-  <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
-  <script>
-// 🎮 WebSocket Fix for Admin Panel (Cocos Game)
-console.log('🔧 Loading Admin Panel WebSocket Fix...');
-
-const SOCKET_SERVER_URL = 'https://one11bet-websocket.onrender.com';
-
-// Global Socket.IO instance for Admin
-window.adminSocket = io(SOCKET_SERVER_URL, {
-  transports: ['websocket', 'polling'],
-  reconnection: true,
-  reconnectionAttempts: 5,
-  reconnectionDelay: 1000
-});
-
-// Socket event handlers
-window.adminSocket.on('connect', () => {
-  console.log('✅ Admin Panel connected to Socket.IO server');
-});
-
-window.adminSocket.on('disconnect', () => {
-  console.log('❌ Admin Panel disconnected');
-});
-
-// WebSocket Blocker for localhost
-const originalWebSocket = window.WebSocket;
-window.WebSocket = function(url, protocols) {
-  console.log('🎯 Admin WebSocket attempt to:', url);
-  
-  if (url && (url.includes('127.0.0.1') || url.includes('localhost'))) {
-    console.log('🔄 Blocking localhost WebSocket in Admin');
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="mobile-web-app-capable" content="yes">
+    <title>Game</title>
     
-    return {
-      readyState: 1, // OPEN
-      send: function(data) {
-        console.log('📤 Admin WebSocket send intercepted');
-        // Route to Socket.IO if needed
-        if (window.adminSocket && window.adminSocket.connected) {
-          try {
-            const parsed = JSON.parse(data);
-            window.adminSocket.emit('admin_data', parsed);
-          } catch (e) {
-            window.adminSocket.emit('raw_data', data);
-          }
-        }
-      },
-      close: function() {
-        console.log('🔒 Admin WebSocket closed');
-      },
-      addEventListener: function(event, callback) {
-        console.log('🎧 Admin WebSocket listening for:', event);
-        if (event === 'open') {
-          setTimeout(() => callback(new Event('open')), 100);
-        }
-      },
-      removeEventListener: function() {
-        console.log('🔕 Admin WebSocket removeEventListener');
-      }
-    };
-  }
-  
-  return new originalWebSocket(url, protocols);
-};
-
-// Copy static properties
-window.WebSocket.CONNECTING = originalWebSocket.CONNECTING;
-window.WebSocket.OPEN = originalWebSocket.OPEN;
-window.WebSocket.CLOSING = originalWebSocket.CLOSING;
-window.WebSocket.CLOSED = originalWebSocket.CLOSED;
-
-console.log('✅ Admin Panel WebSocket Fix loaded!');
-  </script>
+    <!-- Styles -->
+    <link rel="stylesheet" href="style-desktop.css" media="screen and (min-width: 800px)">
+    <link rel="stylesheet" href="style-mobile.css" media="screen and (max-width: 800px)">
+    
+    <!-- FIX: Load game-fix.js trước main.js -->
+    <script src="game-fix.js"></script>
 </head>
 <body>
-  <canvas id="GameCanvas" oncontextmenu="event.preventDefault()" tabindex="0"></canvas>
-  <div id="splash">
-    <div class="progress-bar stripes">
-      <span style="width: 0%"></span>
+    <!-- Splash Screen -->
+    <div id="splash" style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; background: #000; z-index: 9999; display: none;">
+        <div class="progress-bar" style="position: absolute; top: 50%; left: 10%; width: 80%; height: 20px; background: #333; border-radius: 10px;">
+            <span style="display: block; height: 100%; background: #4CAF50; border-radius: 10px; width: 0%; transition: width 0.3s;"></span>
+        </div>
     </div>
-  </div>
 
-<script src="src/settings.js" charset="utf-8"></script>
-<script src="main.js" charset="utf-8"></script>
+    <!-- Game Canvas -->
+    <canvas id="GameCanvas" width="960" height="640" style="visibility: hidden;"></canvas>
+    
+    <!-- Scripts -->
+    <script src="cocos2d-js-min.js"></script>
+    <script src="main.js"></script>
 
-<script type="text/javascript">
-(function () {
-    if (typeof VConsole !== 'undefined') {
-        window.vConsole = new VConsole();
-    }
-
-    var debug = window._CCSettings.debug;
-    var splash = document.getElementById('splash');
-    splash.style.display = 'block';
-
-    function loadScript (moduleName, cb) {
-      function scriptLoaded () {
-          document.body.removeChild(domScript);
-          domScript.removeEventListener('load', scriptLoaded, false);
-          cb && cb();
-      };
-      var domScript = document.createElement('script');
-      domScript.async = true;
-      domScript.src = moduleName;
-      domScript.addEventListener('load', scriptLoaded, false);
-      document.body.appendChild(domScript);
-    }
-
-    loadScript(debug ? 'cocos2d-js.js' : 'cocos2d-js-min.js', function () {
-      if (CC_PHYSICS_BUILTIN || CC_PHYSICS_CANNON) {
-        loadScript(debug ? 'physics.js' : 'physics-min.js', window.boot);
-      }
-      else {
-        window.boot();
-      }
-    });
-})();
-</script>
+    <!-- Admin Panel (nếu cần) -->
+    <script>
+        // Admin WebSocket fix
+        if (window.location.pathname.includes('/admin/')) {
+            console.log('🔧 Loading Admin Panel WebSocket Fix...');
+            try {
+                const adminSocket = new WebSocket('ws://127.0.0.1/redtcp');
+                adminSocket.onopen = function() {
+                    console.log('✅ Admin Panel WebSocket connected');
+                };
+                adminSocket.onerror = function(error) {
+                    console.log('❌ Admin WebSocket error:', error);
+                };
+            } catch (error) {
+                console.log('❌ Admin WebSocket failed:', error);
+            }
+        }
+    </script>
 </body>
 </html>
