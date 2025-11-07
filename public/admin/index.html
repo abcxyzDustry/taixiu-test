@@ -2,50 +2,382 @@
 <html>
 <head>
     <meta charset="utf-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <meta name="apple-mobile-web-app-capable" content="yes">
-    <meta name="mobile-web-app-capable" content="yes">
-    <title>Game</title>
+    <title>Admin Panel - Game Management</title>
     
-    <!-- Styles -->
-    <link rel="stylesheet" href="style-desktop.css" media="screen and (min-width: 800px)">
-    <link rel="stylesheet" href="style-mobile.css" media="screen and (max-width: 800px)">
-    
-    <!-- FIX: Load game-fix.js trước main.js -->
-    <script src="game-fix.js"></script>
+    <!-- 🚨 URGENT WEBSOCKET BLOCKER - LOAD FIRST -->
+    <script>
+    (function() {
+        'use strict';
+        console.log('🛡️ Loading URGENT WebSocket Blocker...');
+        
+        // Block WebSocket immediately
+        const OriginalWebSocket = window.WebSocket;
+        
+        window.WebSocket = function(url, protocols) {
+            console.log('🎯 WebSocket attempt:', url);
+            
+            // BLOCK ALL localhost WebSockets
+            if (url && (url.includes('127.0.0.1') || url.includes('localhost') || url.includes('ws://127.0.0.1/redtcp'))) {
+                console.log('🚫 BLOCKED Localhost WebSocket:', url);
+                
+                const deadSocket = {
+                    readyState: 3, // CLOSED
+                    url: url,
+                    bufferedAmount: 0,
+                    extensions: '',
+                    protocol: '',
+                    
+                    send: function(data) {
+                        console.log('🚫 BLOCKED WebSocket send:', typeof data === 'string' ? data : 'Binary data');
+                        return false;
+                    },
+                    
+                    close: function(code, reason) {
+                        console.log('🚫 BLOCKED WebSocket close:', code, reason);
+                    },
+                    
+                    addEventListener: function(type, listener) {
+                        console.log('🚫 BLOCKED WebSocket addEventListener:', type);
+                        
+                        // Simulate immediate connection failure
+                        if (type === 'open') {
+                            setTimeout(() => {
+                                if (this.onerror) {
+                                    const errorEvent = new Event('error');
+                                    this.onerror(errorEvent);
+                                }
+                                if (listener) {
+                                    const errorEvent = new Event('error');
+                                    listener(errorEvent);
+                                }
+                            }, 10);
+                        }
+                    },
+                    
+                    removeEventListener: function(type, listener) {
+                        console.log('🚫 BLOCKED WebSocket removeEventListener:', type);
+                    },
+                    
+                    dispatchEvent: function(event) {
+                        console.log('🚫 BLOCKED WebSocket dispatchEvent:', event.type);
+                        return false;
+                    }
+                };
+                
+                // Add event properties
+                Object.defineProperties(deadSocket, {
+                    'onopen': { value: null, writable: true },
+                    'onmessage': { value: null, writable: true },
+                    'onerror': { value: null, writable: true },
+                    'onclose': { value: null, writable: true }
+                });
+                
+                return deadSocket;
+            }
+            
+            // Allow non-localhost WebSockets
+            return new OriginalWebSocket(url, protocols);
+        };
+        
+        // Copy all static properties
+        Object.keys(OriginalWebSocket).forEach(key => {
+            window.WebSocket[key] = OriginalWebSocket[key];
+        });
+        
+        window._websocketBlocked = true;
+        console.log('✅ URGENT WebSocket Blocker Activated!');
+    })();
+    </script>
+
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #1e3c72 0%, #2a5298 100%);
+            color: white;
+            min-height: 100vh;
+            padding: 20px;
+        }
+        
+        .admin-container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+        
+        .header {
+            text-align: center;
+            margin-bottom: 30px;
+            padding: 20px;
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 15px;
+            backdrop-filter: blur(10px);
+        }
+        
+        .header h1 {
+            font-size: 2.5em;
+            margin-bottom: 10px;
+            background: linear-gradient(45deg, #ff6b6b, #4ecdc4);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+        
+        .status-panel {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 20px;
+            margin-bottom: 30px;
+        }
+        
+        .status-card {
+            background: rgba(255, 255, 255, 0.1);
+            padding: 20px;
+            border-radius: 10px;
+            text-align: center;
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+        }
+        
+        .status-card h3 {
+            margin-bottom: 10px;
+            font-size: 1.1em;
+            opacity: 0.8;
+        }
+        
+        .status-value {
+            font-size: 1.8em;
+            font-weight: bold;
+        }
+        
+        .connected { color: #4ecdc4; }
+        .disconnected { color: #ff6b6b; }
+        .players { color: #45b7d1; }
+        .revenue { color: #96ceb4; }
+        
+        .control-panel {
+            background: rgba(255, 255, 255, 0.1);
+            padding: 25px;
+            border-radius: 15px;
+            margin-bottom: 30px;
+            backdrop-filter: blur(10px);
+        }
+        
+        .control-panel h2 {
+            margin-bottom: 20px;
+            text-align: center;
+        }
+        
+        .button-group {
+            display: flex;
+            gap: 15px;
+            justify-content: center;
+            flex-wrap: wrap;
+        }
+        
+        .btn {
+            padding: 12px 25px;
+            border: none;
+            border-radius: 8px;
+            font-size: 1em;
+            font-weight: bold;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            min-width: 120px;
+        }
+        
+        .btn-primary {
+            background: #4ecdc4;
+            color: white;
+        }
+        
+        .btn-success {
+            background: #96ceb4;
+            color: white;
+        }
+        
+        .btn-warning {
+            background: #ff6b6b;
+            color: white;
+        }
+        
+        .btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.3);
+        }
+        
+        .logs-panel {
+            background: rgba(0, 0, 0, 0.3);
+            padding: 20px;
+            border-radius: 10px;
+            max-height: 300px;
+            overflow-y: auto;
+            font-family: 'Courier New', monospace;
+            font-size: 0.9em;
+        }
+        
+        .log-entry {
+            padding: 5px 0;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+        }
+        
+        .log-time {
+            color: #4ecdc4;
+            margin-right: 10px;
+        }
+        
+        .log-info { color: #96ceb4; }
+        .log-error { color: #ff6b6b; }
+        .log-warning { color: #ffeaa7; }
+        .log-success { color: #4ecdc4; }
+    </style>
 </head>
 <body>
-    <!-- Splash Screen -->
-    <div id="splash" style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; background: #000; z-index: 9999; display: none;">
-        <div class="progress-bar" style="position: absolute; top: 50%; left: 10%; width: 80%; height: 20px; background: #333; border-radius: 10px;">
-            <span style="display: block; height: 100%; background: #4CAF50; border-radius: 10px; width: 0%; transition: width 0.3s;"></span>
+    <div class="admin-container">
+        <div class="header">
+            <h1>🎮 Game Admin Panel</h1>
+            <p>Real-time Game Management & Monitoring</p>
+        </div>
+        
+        <div class="status-panel">
+            <div class="status-card">
+                <h3>Server Status</h3>
+                <div id="serverStatus" class="status-value disconnected">Disconnected</div>
+            </div>
+            <div class="status-card">
+                <h3>Online Players</h3>
+                <div id="playerCount" class="status-value players">0</div>
+            </div>
+            <div class="status-card">
+                <h3>Socket ID</h3>
+                <div id="socketId" class="status-value">-</div>
+            </div>
+            <div class="status-card">
+                <h3>WebSocket Status</h3>
+                <div id="websocketStatus" class="status-value disconnected">Blocked</div>
+            </div>
+        </div>
+        
+        <div class="control-panel">
+            <h2>Game Controls</h2>
+            <div class="button-group">
+                <button class="btn btn-primary" onclick="adminConnection.getStats()">🔄 Refresh Stats</button>
+                <button class="btn btn-success" onclick="sendBroadcast()">📢 Broadcast</button>
+                <button class="btn btn-warning" onclick="restartGame()">🔄 Restart Game</button>
+                <button class="btn btn-primary" onclick="testConnection()">🧪 Test Connection</button>
+            </div>
+        </div>
+        
+        <div class="control-panel">
+            <h2>Real-time Logs</h2>
+            <div class="logs-panel" id="logsContainer">
+                <div class="log-entry">
+                    <span class="log-time">[00:00:00]</span>
+                    <span class="log-info">Admin Panel Initialized</span>
+                </div>
+            </div>
         </div>
     </div>
 
-    <!-- Game Canvas -->
-    <canvas id="GameCanvas" width="960" height="640" style="visibility: hidden;"></canvas>
-    
-    <!-- Scripts -->
-    <script src="cocos2d-js-min.js"></script>
-    <script src="main.js"></script>
+    <!-- Load your existing WebSocket fix -->
+    <script src="admin-websocket-fix.js"></script>
 
-    <!-- Admin Panel (nếu cần) -->
+    <!-- Admin Panel Functionality -->
     <script>
-        // Admin WebSocket fix
-        if (window.location.pathname.includes('/admin/')) {
-            console.log('🔧 Loading Admin Panel WebSocket Fix...');
-            try {
-                const adminSocket = new WebSocket('ws://127.0.0.1/redtcp');
-                adminSocket.onopen = function() {
-                    console.log('✅ Admin Panel WebSocket connected');
-                };
-                adminSocket.onerror = function(error) {
-                    console.log('❌ Admin WebSocket error:', error);
-                };
-            } catch (error) {
-                console.log('❌ Admin WebSocket failed:', error);
+        // Admin UI Functions
+        function addLog(message, type = 'info') {
+            const logsContainer = document.getElementById('logsContainer');
+            const time = new Date().toLocaleTimeString();
+            const logEntry = document.createElement('div');
+            logEntry.className = 'log-entry';
+            logEntry.innerHTML = `
+                <span class="log-time">[${time}]</span>
+                <span class="log-${type}">${message}</span>
+            `;
+            logsContainer.appendChild(logEntry);
+            logsContainer.scrollTop = logsContainer.scrollHeight;
+        }
+        
+        // Update connection status
+        window.adminConnectionUpdate = function(status) {
+            const statusElement = document.getElementById('serverStatus');
+            const websocketStatus = document.getElementById('websocketStatus');
+            
+            if (status === 'connected') {
+                statusElement.textContent = 'Connected';
+                statusElement.className = 'status-value connected';
+                websocketStatus.textContent = 'Connected via Socket.IO';
+                websocketStatus.className = 'status-value connected';
+                addLog('✅ Connected to game server via Socket.IO', 'success');
+            } else if (status === 'disconnected') {
+                statusElement.textContent = 'Disconnected';
+                statusElement.className = 'status-value disconnected';
+                websocketStatus.textContent = 'Disconnected';
+                websocketStatus.className = 'status-value disconnected';
+                addLog('❌ Disconnected from game server', 'error');
+            } else if (status === 'error') {
+                statusElement.textContent = 'Error';
+                statusElement.className = 'status-value disconnected';
+                addLog('❌ Connection error', 'error');
+            }
+        };
+        
+        // Update stats
+        window.updateAdminStats = function(data) {
+            if (data.players) {
+                document.getElementById('playerCount').textContent = data.players;
+            }
+            addLog(`📊 Stats updated: ${data.players} players online`, 'info');
+        };
+        
+        // Update socket ID
+        if (window.adminSocket) {
+            window.adminSocket.on('connect', () => {
+                document.getElementById('socketId').textContent = window.adminSocket.id.substring(0, 8) + '...';
+            });
+        }
+        
+        // Control functions
+        function sendBroadcast() {
+            const message = prompt('Enter broadcast message:');
+            if (message && window.adminConnection.sendCommand) {
+                window.adminConnection.sendCommand('broadcast', { message });
+                addLog(`📢 Broadcast sent: ${message}`, 'info');
             }
         }
+        
+        function restartGame() {
+            if (confirm('Are you sure you want to restart the game?')) {
+                if (window.adminConnection.sendCommand) {
+                    window.adminConnection.sendCommand('restart', {});
+                    addLog('🔄 Game restart command sent', 'warning');
+                }
+            }
+        }
+        
+        function testConnection() {
+            addLog('🧪 Testing connection...', 'info');
+            if (window.adminConnection.getStatus) {
+                const status = window.adminConnection.getStatus();
+                addLog(`Connection status: ${status}`, 'info');
+            }
+        }
+        
+        // Initialize
+        document.addEventListener('DOMContentLoaded', function() {
+            addLog('🛡️ WebSocket blocker activated - Localhost connections blocked', 'success');
+            addLog('🎮 Admin Panel ready - Waiting for Socket.IO connection...', 'info');
+            
+            // Auto-connect after 2 seconds
+            setTimeout(() => {
+                if (window.adminSocket && !window.adminSocket.connected) {
+                    addLog('🔄 Attempting auto-connect to game server...', 'info');
+                }
+            }, 2000);
+        });
     </script>
 </body>
 </html>
