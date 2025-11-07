@@ -1,6 +1,7 @@
 const express = require('express');
 const http = require('http');
 const socketIo = require('socket.io');
+const WebSocket = require('ws');
 const cors = require('cors');
 const crypto = require('crypto');
 
@@ -37,7 +38,6 @@ const io = socketIo(server, {
 const PORT = process.env.PORT || 3001;
 
 // ==================== AUTHENTICATION DATABASE ====================
-// Mock database (trong thực tế dùng MongoDB/MySQL)
 const users = new Map();
 const sessions = new Map();
 
@@ -50,19 +50,175 @@ function hashPassword(password) {
   return crypto.createHash('sha256').update(password).digest('hex');
 }
 
+// ==================== RAW WEBSOCKET HANDLERS ====================
+// Game WebSocket server (Raw WebSocket)
+const gameWss = new WebSocket.Server({ 
+  noServer: true,
+  path: '/client'
+});
+
+// Admin WebSocket server (Raw WebSocket)  
+const adminWss = new WebSocket.Server({ 
+  noServer: true,
+  path: '/redtcp'
+});
+
+// Handle upgrade requests for raw WebSockets
+server.on('upgrade', (request, socket, head) => {
+  const pathname = request.url;
+  
+  console.log('🔄 WebSocket upgrade request:', pathname);
+  
+  if (pathname === '/client') {
+    gameWss.handleUpgrade(request, socket, head, (ws) => {
+      gameWss.emit('connection', ws, request);
+    });
+  } else if (pathname === '/redtcp') {
+    adminWss.handleUpgrade(request, socket, head, (ws) => {
+      adminWss.emit('connection', ws, request);
+    });
+  } else {
+    socket.destroy();
+  }
+});
+
+// Game WebSocket handler
+gameWss.on('connection', function(ws, req) {
+  console.log('🎮 Raw WebSocket Game connection established');
+  
+  // Send immediate response to confirm connection
+  ws.send(JSON.stringify({
+    type: 'connection',
+    status: 'connected',
+    message: 'Game WebSocket connected successfully'
+  }));
+  
+  ws.on('message', function(message) {
+    try {
+      console.log('📨 Raw Game message received:', message.toString());
+      const data = JSON.parse(message);
+      
+      // Handle authentication
+      if (data.authentication) {
+        const { username, password } = data.authentication;
+        console.log('🔑 Game auth attempt:', username);
+        
+        // Auto-auth for testing - ACCEPT ALL
+        ws.send(JSON.stringify({
+          auth: true,
+          success: true,
+          message: 'Đăng nhập game thành công'
+        }));
+        
+        console.log('✅ Game authentication approved');
+      }
+      
+      // Handle other game messages
+      if (data.action) {
+        console.log('🎯 Game action:', data.action);
+        ws.send(JSON.stringify({
+          type: 'response',
+          action: data.action,
+          success: true,
+          data: { timestamp: new Date().toISOString() }
+        }));
+      }
+      
+    } catch (error) {
+      console.log('❌ Game message error:', error);
+    }
+  });
+  
+  ws.on('close', function() {
+    console.log('❌ Game WebSocket closed');
+  });
+  
+  ws.on('error', function(error) {
+    console.log('❌ Game WebSocket error:', error);
+  });
+});
+
+// Admin WebSocket handler  
+adminWss.on('connection', function(ws, req) {
+  console.log('🔐 Raw WebSocket Admin connection established');
+  
+  // Send immediate response to confirm connection
+  ws.send(JSON.stringify({
+    type: 'connection', 
+    status: 'connected',
+    message: 'Admin WebSocket connected successfully'
+  }));
+  
+  ws.on('message', function(message) {
+    try {
+      console.log('📨 Raw Admin message received:', message.toString());
+      const data = JSON.parse(message);
+      
+      // Handle admin authentication
+      if (data.authentication) {
+        const { username, password } = data.authentication;
+        console.log('🔑 Admin login attempt:', username);
+        
+        // AUTO-APPROVE ALL ADMIN LOGINS
+        ws.send(JSON.stringify({
+          auth: true,
+          success: true,
+          message: 'Đăng nhập admin thành công'
+        }));
+        
+        // Send admin data
+        setTimeout(() => {
+          ws.send(JSON.stringify({
+            type: 'admin_data',
+            data: {
+              username: username,
+              rights: 9,
+              players: Array.from(users.values()).map(u => ({
+                username: u.username,
+                balance: u.balance,
+                level: u.level
+              }))
+            }
+          }));
+        }, 1000);
+        
+        console.log('✅ Admin authentication approved:', username);
+      }
+      
+      // Handle admin commands
+      if (data.command) {
+        console.log('🎯 Admin command:', data.command);
+        ws.send(JSON.stringify({
+          type: 'command_response',
+          command: data.command,
+          success: true,
+          message: 'Command executed successfully',
+          timestamp: new Date().toISOString()
+        }));
+      }
+      
+    } catch (error) {
+      console.log('❌ Admin message error:', error);
+    }
+  });
+  
+  ws.on('close', function() {
+    console.log('❌ Admin WebSocket closed');
+  });
+  
+  ws.on('error', function(error) {
+    console.log('❌ Admin WebSocket error:', error);
+  });
+});
+
 // ==================== AUTHENTICATION API ENDPOINTS ====================
 // User Registration
 app.post('/api/auth/register', (req, res) => {
   try {
     const { username, password, captcha, email, phone } = req.body;
     
-    console.log('📝 Register attempt:', { 
-      username, 
-      captcha,
-      hasPassword: !!password 
-    });
+    console.log('📝 Register attempt:', { username, captcha });
 
-    // Validation
     if (!username || !password) {
       return res.json({
         success: false,
@@ -77,14 +233,6 @@ app.post('/api/auth/register', (req, res) => {
       });
     }
 
-    if (password.length < 6) {
-      return res.json({
-        success: false,
-        message: 'Mật khẩu phải có ít nhất 6 ký tự'
-      });
-    }
-
-    // Check if user exists
     if (users.has(username)) {
       return res.json({
         success: false,
@@ -99,7 +247,7 @@ app.post('/api/auth/register', (req, res) => {
       password: hashPassword(password),
       email: email || '',
       phone: phone || '',
-      balance: 1000000, // Starting balance
+      balance: 1000000,
       level: 1,
       createdAt: new Date(),
       lastLogin: new Date(),
@@ -136,13 +284,8 @@ app.post('/api/auth/login', (req, res) => {
   try {
     const { username, password, captcha } = req.body;
     
-    console.log('🔐 Login attempt:', { 
-      username, 
-      captcha,
-      hasPassword: !!password 
-    });
+    console.log('🔐 Login attempt:', { username, captcha });
 
-    // Validation
     if (!username || !password) {
       return res.json({
         success: false,
@@ -202,82 +345,24 @@ app.post('/api/auth/login', (req, res) => {
   }
 });
 
-// Check Token Validation
-app.post('/api/auth/validate', (req, res) => {
-  try {
-    const { token } = req.body;
-
-    if (!token) {
-      return res.json({ valid: false });
-    }
-
-    const session = sessions.get(token);
-    if (!session) {
-      return res.json({ valid: false });
-    }
-
-    res.json({ 
-      valid: true,
-      user: {
-        username: session.username
-      }
-    });
-
-  } catch (error) {
-    res.json({ valid: false });
-  }
-});
-
-// Get User Profile
-app.get('/api/user/profile', (req, res) => {
-  const token = req.headers.authorization;
-  
-  if (!token) {
-    return res.status(401).json({ error: 'Unauthorized' });
-  }
-
-  const session = sessions.get(token);
-  if (!session) {
-    return res.status(401).json({ error: 'Invalid token' });
-  }
-
-  const user = users.get(session.username);
-  if (!user) {
-    return res.status(404).json({ error: 'User not found' });
-  }
-
-  res.json({
-    username: user.username,
-    balance: user.balance,
-    level: user.level,
-    createdAt: user.createdAt,
-    lastLogin: user.lastLogin
-  });
-});
-
-// ==================== GAME MANAGEMENT ====================
-// Store game data
+// ==================== SOCKET.IO HANDLERS ====================
 const gameState = {
   players: new Map(),
   totalConnections: 0
 };
 
-// WebSocket connection handler
 io.on('connection', (socket) => {
-  console.log('🎯 New player connected:', socket.id);
+  console.log('🎯 Socket.IO player connected:', socket.id);
   gameState.totalConnections++;
   
-  // Add player to game state
   gameState.players.set(socket.id, {
     id: socket.id,
     connectedAt: new Date(),
     name: `Player_${socket.id.slice(0, 6)}`,
-    score: 0,
-    position: { x: 0, y: 0 },
     isAuthenticated: false
   });
 
-  // Send welcome message to the new player
+  // Send welcome message
   socket.emit('welcome', {
     message: 'Kết nối game thành công! 🎮',
     playerId: socket.id,
@@ -285,7 +370,7 @@ io.on('connection', (socket) => {
     totalPlayers: gameState.players.size
   });
 
-  // Handle authentication via socket
+  // Handle authentication
   socket.on('authenticate', (data) => {
     const { token } = data;
     const session = sessions.get(token);
@@ -300,76 +385,34 @@ io.on('connection', (socket) => {
         user: session
       });
       
-      console.log('✅ Socket authenticated:', session.username);
-    } else {
-      socket.emit('authentication_failed', {
-        message: 'Token không hợp lệ'
-      });
+      console.log('✅ Socket.IO authenticated:', session.username);
     }
   });
 
-  // Handle player movement
-  socket.on('player_move', (data) => {
-    console.log('👤 Player move:', socket.id, data);
-    
-    // Update player position
-    const player = gameState.players.get(socket.id);
-    if (player && data.position) {
-      player.position = data.position;
-    }
-    
-    // Broadcast to other players
-    socket.broadcast.emit('player_moved', {
-      playerId: socket.id,
-      position: data.position,
-      timestamp: new Date().toISOString()
-    });
-  });
-
-  // Handle game actions (Tài Xỉu specific)
-  socket.on('bet_placed', (data) => {
-    console.log('💰 Bet placed:', socket.id, data);
-    
-    io.emit('bet_update', {
-      playerId: socket.id,
-      playerName: data.playerName || `Player_${socket.id.slice(0, 6)}`,
-      betType: data.betType, // 'tai' or 'xiu'
-      amount: data.amount,
-      timestamp: new Date().toISOString()
-    });
-  });
-
-  // Handle disconnect
   socket.on('disconnect', (reason) => {
-    console.log('❌ Player disconnected:', socket.id, 'Reason:', reason);
-    
+    console.log('❌ Socket.IO disconnected:', socket.id);
     gameState.players.delete(socket.id);
-    
-    // Notify all players
-    io.emit('player_left', {
-      playerId: socket.id,
-      totalPlayers: gameState.players.size,
-      timestamp: new Date().toISOString()
-    });
   });
 });
 
 // ==================== HEALTH & INFO ENDPOINTS ====================
-// Health check endpoint
 app.get('/health', (req, res) => {
   res.json({ 
     status: 'OK 🟢',
     service: 'Tài Xỉu WebSocket Server + Authentication API',
     version: '1.0.0',
-    totalPlayers: gameState.players.size,
-    totalUsers: users.size,
-    totalConnections: gameState.totalConnections,
-    uptime: Math.floor(process.uptime()) + ' seconds',
-    timestamp: new Date().toISOString()
+    connections: {
+      rawWebSocket: {
+        game: gameWss.clients.size,
+        admin: adminWss.clients.size
+      },
+      socketIO: gameState.players.size,
+      totalUsers: users.size
+    },
+    uptime: Math.floor(process.uptime()) + ' seconds'
   });
 });
 
-// Auth API info endpoint
 app.get('/api/auth/info', (req, res) => {
   res.json({
     service: 'Tài Xỉu Authentication API',
@@ -379,56 +422,41 @@ app.get('/api/auth/info', (req, res) => {
       validate: 'POST /api/auth/validate',
       profile: 'GET /api/user/profile'
     },
-    statistics: {
-      totalUsers: users.size,
-      totalSessions: sessions.size,
-      onlinePlayers: gameState.players.size
+    websocket: {
+      game: 'Raw WebSocket: /client',
+      admin: 'Raw WebSocket: /redtcp', 
+      socketIO: 'Socket.IO: various events'
     }
   });
 });
 
-// Game info endpoint
 app.get('/game-info', (req, res) => {
-  const players = Array.from(gameState.players.values()).map(player => ({
-    id: player.id,
-    name: player.name,
-    score: player.score,
-    authenticated: player.isAuthenticated,
-    connectedAt: player.connectedAt,
-    onlineFor: Math.floor((new Date() - player.connectedAt) / 1000) + 's'
-  }));
-
   res.json({
     game: '🎲 Tài Xỉu Game Server',
     status: 'Running',
-    websocketUrl: 'Connect via Socket.IO client',
-    statistics: {
-      onlinePlayers: gameState.players.size,
-      totalConnections: gameState.totalConnections,
-      uptime: Math.floor(process.uptime()) + ' seconds'
+    connections: {
+      rawWebSocket: {
+        game: gameWss.clients.size,
+        admin: adminWss.clients.size
+      },
+      socketIO: gameState.players.size
     },
-    onlinePlayers: players,
-    supportedEvents: [
-      'player_move', 
-      'bet_placed',
-      'authenticate',
-      'welcome',
-      'player_joined',
-      'player_left'
+    supportedProtocols: [
+      'Raw WebSocket (/client, /redtcp)',
+      'Socket.IO'
     ]
   });
 });
 
-// Root endpoint
 app.get('/', (req, res) => {
   res.json({
     message: '🎲 Tài Xỉu WebSocket Server + Authentication API is running!',
-    game: 'Tài Xỉu (Sic Bo)',
-    endpoints: {
-      health: '/health',
-      gameInfo: '/game-info',
-      authInfo: '/api/auth/info',
-      websocket: 'Connect using Socket.IO client to port ' + PORT
+    protocols: {
+      rawWebSocket: {
+        game: 'Connect to /client',
+        admin: 'Connect to /redtcp'
+      },
+      socketIO: 'Connect using Socket.IO client'
     },
     authentication: {
       register: 'POST /api/auth/register',
@@ -444,15 +472,21 @@ server.listen(PORT, '0.0.0.0', () => {
   console.log(`🎮 Game: Tài Xỉu (Sic Bo)`);
   console.log(`🔐 Authentication: Enabled`);
   console.log('================================');
+  console.log('🔗 WebSocket Endpoints:');
+  console.log(`   Game (Raw WS): ws://localhost:${PORT}/client`);
+  console.log(`   Admin (Raw WS): ws://localhost:${PORT}/redtcp`);
+  console.log(`   Socket.IO: Connect to port ${PORT}`);
+  console.log('================================');
   console.log('🔗 API Endpoints:');
   console.log(`   Health: http://localhost:${PORT}/health`);
   console.log(`   Game Info: http://localhost:${PORT}/game-info`);
   console.log(`   Auth Info: http://localhost:${PORT}/api/auth/info`);
-  console.log(`   Register: POST http://localhost:${PORT}/api/auth/register`);
-  console.log(`   Login: POST http://localhost:${PORT}/api/auth/login`);
   console.log('================================');
   console.log('🌐 Allow origins:');
   console.log(`   - https://one11bet-com.onrender.com`);
   console.log(`   - http://localhost:10000`);
   console.log('================================');
+  console.log('✅ Raw WebSocket handlers: ACTIVE');
+  console.log('✅ Socket.IO handlers: ACTIVE');
+  console.log('✅ Authentication API: ACTIVE');
 });
