@@ -1,7 +1,7 @@
 {
 	"name": "RedVip",
 	"version": "1.17.02",
-	"description": "Server game By MrT98 (Red T)",
+	"description": "Server game By abcxyz dustry",
 	"main": "server.js",
 	"engines": {
 		"node": "18.x",
@@ -44,7 +44,8 @@
 		"svg2img": "^0.9.3",
 		"telebot": "1.4.1",
 		"validator": "^13.11.0",
-		"voucher-code-generator": "^1.3.0"
+		"voucher-code-generator": "^1.3.0",
+		"socket.io-client": "^4.7.2"
 	},
 	"devDependencies": {
 		"node-gyp": "^9.4.1"
