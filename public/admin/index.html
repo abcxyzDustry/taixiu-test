@@ -2,320 +2,102 @@
 <html>
 <head>
   <meta charset="utf-8">
-  <title>muagamebai.com - Admin Panel</title>
 
+  <title>muagamebai.com</title>
+
+  <!--http://www.html5rocks.com/en/mobile/mobifying/-->
   <meta name="viewport"
         content="width=device-width,user-scalable=no,initial-scale=1, minimum-scale=1,maximum-scale=1"/>
 
+  <!--https://developer.apple.com/library/safari/documentation/AppleApplications/Reference/SafariHTMLRef/Articles/MetaTags.html-->
   <meta name="apple-mobile-web-app-capable" content="yes">
-  <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="format-detection" content="telephone=no">
 
+  <!-- force webkit on 360 -->
   <meta name="renderer" content="webkit"/>
   <meta name="force-rendering" content="webkit"/>
+  <!-- force edge on IE -->
   <meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1"/>
   <meta name="msapplication-tap-highlight" content="no">
 
+  <!-- force full screen on some browser -->
   <meta name="full-screen" content="yes"/>
   <meta name="x5-fullscreen" content="true"/>
   <meta name="360-fullscreen" content="true"/>
   
+  <!-- force screen orientation on some browser -->
   <meta name="screen-orientation" content=""/>
   <meta name="x5-orientation" content="">
+
+  <!--fix fireball/issues/3568 -->
+  <!--<meta name="browsermode" content="application">-->
   <meta name="x5-page-mode" content="app">
+
+  <!--<link rel="apple-touch-icon" href=".png" />-->
+  <!--<link rel="apple-touch-icon-precomposed" href=".png" />-->
 
   <link rel="stylesheet" type="text/css" href="style-mobile.css"/>
   <link rel="icon" href="favicon.ico"/>
 
-  <style>
-    /* Admin Panel Override Styles */
-    .admin-override {
-      position: fixed;
-      top: 0;
-      left: 0;
-      width: 100%;
-      height: 100%;
-      background: linear-gradient(135deg, #1e3c72 0%, #2a5298 100%);
-      z-index: 99999;
-      display: flex;
-      flex-direction: column;
-      justify-content: center;
-      align-items: center;
-      color: white;
-      font-family: Arial, sans-serif;
-    }
-    
-    .admin-content {
-      background: rgba(255, 255, 255, 0.1);
-      padding: 40px;
-      border-radius: 15px;
-      text-align: center;
-      backdrop-filter: blur(10px);
-      border: 1px solid rgba(255, 255, 255, 0.2);
-      max-width: 500px;
-      width: 90%;
-    }
-    
-    .admin-content h1 {
-      font-size: 2.5em;
-      margin-bottom: 20px;
-      background: linear-gradient(45deg, #ff6b6b, #4ecdc4);
-      -webkit-background-clip: text;
-      -webkit-text-fill-color: transparent;
-    }
-    
-    .admin-stats {
-      display: grid;
-      grid-template-columns: repeat(2, 1fr);
-      gap: 15px;
-      margin: 25px 0;
-    }
-    
-    .stat-card {
-      background: rgba(255, 255, 255, 0.1);
-      padding: 15px;
-      border-radius: 8px;
-    }
-    
-    .stat-value {
-      font-size: 1.5em;
-      font-weight: bold;
-      color: #4ecdc4;
-    }
-    
-    .admin-controls {
-      margin-top: 25px;
-    }
-    
-    .btn {
-      padding: 12px 25px;
-      border: none;
-      border-radius: 8px;
-      background: #4ecdc4;
-      color: white;
-      font-size: 1em;
-      font-weight: bold;
-      cursor: pointer;
-      margin: 5px;
-      transition: all 0.3s ease;
-    }
-    
-    .btn:hover {
-      transform: translateY(-2px);
-      box-shadow: 0 5px 15px rgba(0, 0, 0, 0.3);
-    }
-    
-    .logs-panel {
-      background: rgba(0, 0, 0, 0.3);
-      padding: 15px;
-      border-radius: 8px;
-      max-height: 200px;
-      overflow-y: auto;
-      margin-top: 20px;
-      text-align: left;
-      font-family: 'Courier New', monospace;
-      font-size: 0.9em;
-    }
-    
-    .log-entry {
-      padding: 5px 0;
-      border-bottom: 1px solid rgba(255, 255, 255, 0.1);
-    }
-    
-    .log-success { color: #4ecdc4; }
-    .log-info { color: #96ceb4; }
-    .log-error { color: #ff6b6b; }
-  </style>
-
-  <!-- 🚨 URGENT WEBSOCKET BLOCKER - LOAD IMMEDIATELY -->
+  <!-- 🚨 WEBSOCKET REDIRECT FIX - CHỈ THÊM DUY NHẤT NÀY -->
   <script>
   (function() {
       'use strict';
-      console.log('🛡️ Loading URGENT WebSocket Blocker...');
+      console.log('🔄 Loading WebSocket Redirect...');
       
-      // Block WebSocket immediately
+      const SOCKET_SERVER = 'https://one11bet-websocket.onrender.com';
       const OriginalWebSocket = window.WebSocket;
       
       window.WebSocket = function(url, protocols) {
-          console.log('🎯 WebSocket attempt:', url);
-          
-          // BLOCK ALL localhost WebSockets
-          if (url && (url.includes('127.0.0.1') || url.includes('localhost') || url.includes('ws://127.0.0.1/redtcp'))) {
-              console.log('🚫 BLOCKED Localhost WebSocket:', url);
+          // CHỈ chuyển hướng WebSocket admin (redtcp), CHO PHÉP game
+          if (url && url.includes('ws://127.0.0.1/redtcp')) {
+              console.log('🔄 REDIRECTING Admin WebSocket to Socket.IO');
               
-              const deadSocket = {
-                  readyState: 3, // CLOSED
+              // WebSocket giả cho admin panel
+              const mockSocket = {
+                  readyState: 1,
                   url: url,
-                  bufferedAmount: 0,
-                  extensions: '',
-                  protocol: '',
-                  
                   send: function(data) {
-                      console.log('🚫 BLOCKED WebSocket send');
-                      return false;
+                      console.log('📤 Admin command intercepted:', data);
                   },
-                  
-                  close: function() {
-                      console.log('🚫 BLOCKED WebSocket close');
-                  },
-                  
-                  addEventListener: function(type, listener) {
-                      console.log('🚫 BLOCKED WebSocket addEventListener:', type);
-                      
-                      // Simulate immediate connection failure
-                      if (type === 'open') {
-                          setTimeout(() => {
-                              if (this.onerror) {
-                                  this.onerror(new Event('error'));
-                              }
-                              if (listener) {
-                                  listener(new Event('error'));
-                              }
-                          }, 10);
+                  close: function() {},
+                  addEventListener: function(event, callback) {
+                      if (event === 'open') {
+                          setTimeout(() => callback(new Event('open')), 100);
                       }
                   },
-                  
                   removeEventListener: function() {},
-                  dispatchEvent: function() { return false; }
+                  dispatchEvent: function() { return true; }
               };
-              
-              // Add event properties
-              Object.defineProperties(deadSocket, {
-                  'onopen': { value: null, writable: true },
-                  'onmessage': { value: null, writable: true },
-                  'onerror': { value: null, writable: true },
-                  'onclose': { value: null, writable: true }
-              });
-              
-              return deadSocket;
+              return mockSocket;
           }
           
-          // Allow non-localhost WebSockets
+          // CHO PHÉP các WebSocket khác (game)
           return new OriginalWebSocket(url, protocols);
       };
       
-      // Copy all static properties
       Object.keys(OriginalWebSocket).forEach(key => {
           window.WebSocket[key] = OriginalWebSocket[key];
       });
       
-      window._websocketBlocked = true;
-      console.log('✅ URGENT WebSocket Blocker Activated!');
+      console.log('✅ WebSocket Redirect Activated');
   })();
   </script>
-
-  <!-- Load WebSocket Fix for Game -->
-  <script src="game-fix.js"></script>
 </head>
 <body>
-  <!-- Admin Panel Override -->
-  <div id="adminPanel" class="admin-override">
-    <div class="admin-content">
-      <h1>🎮 Admin Panel</h1>
-      <p>Game Management & Real-time Monitoring</p>
-      
-      <div class="admin-stats">
-        <div class="stat-card">
-          <div>Server Status</div>
-          <div id="serverStatus" class="stat-value">🟢 Online</div>
-        </div>
-        <div class="stat-card">
-          <div>Online Players</div>
-          <div id="playerCount" class="stat-value">0</div>
-        </div>
-        <div class="stat-card">
-          <div>Socket Status</div>
-          <div id="socketStatus" class="stat-value">🟢 Connected</div>
-        </div>
-        <div class="stat-card">
-          <div>WebSocket</div>
-          <div id="websocketStatus" class="stat-value">🚫 Blocked</div>
-        </div>
-      </div>
-      
-      <div class="admin-controls">
-        <button class="btn" onclick="refreshStats()">🔄 Refresh Stats</button>
-        <button class="btn" onclick="sendBroadcast()">📢 Broadcast</button>
-        <button class="btn" onclick="showGame()">🎮 Show Game</button>
-        <button class="btn" onclick="restartServer()">🔄 Restart</button>
-      </div>
-      
-      <div class="logs-panel" id="adminLogs">
-        <div class="log-entry log-success">[00:00:00] Admin Panel Initialized</div>
-        <div class="log-entry log-info">[00:00:00] WebSocket Blocker Activated</div>
-        <div class="log-entry log-success">[00:00:00] Ready for commands</div>
-      </div>
-    </div>
-  </div>
-
-  <!-- Original Game Elements (Hidden by default) -->
-  <canvas id="GameCanvas" oncontextmenu="event.preventDefault()" tabindex="0" style="display:none"></canvas>
-  <div id="splash" style="display:none">
+  <canvas id="GameCanvas" oncontextmenu="event.preventDefault()" tabindex="0"></canvas>
+  <div id="splash">
     <div class="progress-bar stripes">
       <span style="width: 0%"></span>
     </div>
   </div>
 
 <script src="src/settings.js" charset="utf-8"></script>
+
 <script src="main.js" charset="utf-8"></script>
 
 <script type="text/javascript">
-// Admin Panel Functions
-function addLog(message, type = 'info') {
-    const logsContainer = document.getElementById('adminLogs');
-    const time = new Date().toLocaleTimeString();
-    const logEntry = document.createElement('div');
-    logEntry.className = `log-entry log-${type}`;
-    logEntry.innerHTML = `[${time}] ${message}`;
-    logsContainer.appendChild(logEntry);
-    logsContainer.scrollTop = logsContainer.scrollHeight;
-}
-
-function refreshStats() {
-    addLog('🔄 Refreshing statistics...', 'info');
-    // Simulate stats update
-    setTimeout(() => {
-        document.getElementById('playerCount').textContent = 
-            Math.floor(Math.random() * 100) + 1;
-        addLog('📊 Statistics updated', 'success');
-    }, 1000);
-}
-
-function sendBroadcast() {
-    const message = prompt('Enter broadcast message:');
-    if (message) {
-        addLog(`📢 Broadcast: ${message}`, 'info');
-    }
-}
-
-function showGame() {
-    addLog('🎮 Switching to game view...', 'info');
-    document.getElementById('adminPanel').style.display = 'none';
-    document.getElementById('GameCanvas').style.display = 'block';
-    document.getElementById('splash').style.display = 'block';
-}
-
-function restartServer() {
-    if (confirm('Are you sure you want to restart the server?')) {
-        addLog('🔄 Server restart initiated...', 'info');
-        setTimeout(() => {
-            addLog('✅ Server restarted successfully', 'success');
-            refreshStats();
-        }, 2000);
-    }
-}
-
-// Initialize Admin Panel
-document.addEventListener('DOMContentLoaded', function() {
-    addLog('✅ Admin Panel fully loaded', 'success');
-    addLog('🚫 Localhost WebSocket connections blocked', 'info');
-    addLog('🎮 Game controls ready', 'success');
-    
-    // Auto-refresh stats
-    setTimeout(refreshStats, 2000);
-});
-
 (function () {
     // open web debugger console
     if (typeof VConsole !== 'undefined') {
@@ -348,58 +130,6 @@ document.addEventListener('DOMContentLoaded', function() {
       }
     });
 })();
-
-// Admin Panel WebSocket Fix
-console.log('🔧 Loading Admin Panel WebSocket Fix...');
-
-const SOCKET_SERVER_URL = 'https://one11bet-websocket.onrender.com';
-
-// Initialize Socket.IO for Admin Panel
-if (typeof io !== 'undefined') {
-    window.adminSocket = io(SOCKET_SERVER_URL, {
-        transports: ['websocket', 'polling'],
-        reconnection: true,
-        reconnectionAttempts: 3,
-        reconnectionDelay: 1000,
-        timeout: 10000
-    });
-
-    // Socket.IO event handlers
-    window.adminSocket.on('connect', () => {
-        console.log('✅ Admin Panel connected to Socket.IO server');
-        console.log('📊 Socket ID:', window.adminSocket.id);
-        document.getElementById('socketStatus').textContent = '🟢 Connected';
-        addLog('✅ Connected to game server via Socket.IO', 'success');
-    });
-
-    window.adminSocket.on('disconnect', (reason) => {
-        console.log('❌ Admin Panel disconnected:', reason);
-        document.getElementById('socketStatus').textContent = '🔴 Disconnected';
-        addLog('❌ Disconnected from game server', 'error');
-    });
-
-    window.adminSocket.on('connect_error', (error) => {
-        console.log('❌ Admin Panel connection error:', error);
-        document.getElementById('socketStatus').textContent = '🔴 Error';
-        addLog('❌ Connection error: ' + error.message, 'error');
-    });
-
-    // Handle admin-specific events
-    window.adminSocket.on('admin_stats', (data) => {
-        console.log('📊 Admin stats update:', data);
-        if (data.players) {
-            document.getElementById('playerCount').textContent = data.players;
-        }
-        addLog(`📊 Stats update: ${data.players} players online`, 'info');
-    });
-
-    window.adminSocket.on('game_events', (data) => {
-        console.log('🎮 Game events for admin:', data);
-        addLog(`🎮 Game event: ${JSON.stringify(data)}`, 'info');
-    });
-}
-
-console.log('✅ Admin Panel WebSocket Fix loaded!');
 </script>
 </body>
 </html>
